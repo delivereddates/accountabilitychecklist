@@ -194,6 +194,24 @@ export function DailyEditor(props: Props) {
     }
   }
 
+  async function deleteUser(userId: string, name: string) {
+    if (
+      !window.confirm(
+        `Delete ${name} and ALL their tasks and history? This cannot be undone.`,
+      )
+    )
+      return;
+    try {
+      const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
+      if (!res.ok) throw new Error();
+      setUsers((us) => us.filter((u) => u.id !== userId));
+      setTasks((ts) => ts.filter((t) => t.user_id !== userId));
+      refreshServer();
+    } catch {
+      setError("Couldn’t delete user.");
+    }
+  }
+
   // --- navigation ----------------------------------------------------------
 
   function goToDate(iso: string) {
@@ -278,6 +296,7 @@ export function DailyEditor(props: Props) {
               onRenameTask={renameTask}
               onDeleteTask={deleteTask}
               onAddTask={(title) => addTask(u.id, title)}
+              onDeleteUser={() => deleteUser(u.id, u.name)}
             />
           ))}
 
@@ -357,6 +376,7 @@ function UserCard({
   onRenameTask,
   onDeleteTask,
   onAddTask,
+  onDeleteUser,
 }: {
   user: User;
   tasks: Task[];
@@ -374,6 +394,7 @@ function UserCard({
   onRenameTask: (taskId: string, title: string) => Promise<boolean>;
   onDeleteTask: (taskId: string) => void;
   onAddTask: (title: string) => Promise<boolean>;
+  onDeleteUser: () => void;
 }) {
   const selScore = scoreForDate(selectedDate);
   const prevScore = scoreForDate(prevDate);
@@ -381,7 +402,17 @@ function UserCard({
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
       <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
-        <h2 className="text-base font-semibold">{user.name}</h2>
+        <div className="flex items-center gap-1">
+          <h2 className="text-base font-semibold">{user.name}</h2>
+          <button
+            onClick={onDeleteUser}
+            title={`Delete ${user.name}`}
+            aria-label={`Delete ${user.name}`}
+            className="rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--color-nocheck)] hover:opacity-100"
+          >
+            <Trash2 className="h-4 w-4" />
+          </button>
+        </div>
         <div className="flex items-center gap-1.5">
           <MiniScore label={selLabel.primary} score={selScore} />
           <MiniScore label={prevLabel.primary} score={prevScore} />
@@ -470,7 +501,7 @@ function TaskRow({
         <TaskTitle title={task.title} onRename={(t) => onRename(task.id, t)} />
         <button
           onClick={() => onDelete(task.id)}
-          className="rounded p-1 text-[var(--muted)] opacity-0 transition hover:text-[var(--color-nocheck)] group-hover:opacity-100"
+          className="rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--color-nocheck)] hover:opacity-100"
           aria-label="Delete task"
           title="Delete task"
         >
@@ -570,7 +601,7 @@ function TaskTitle({
           setDraft(title);
           setEditing(true);
         }}
-        className="rounded p-1 text-[var(--muted)] opacity-0 transition hover:text-[var(--foreground)] group-hover:opacity-100"
+        className="rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--foreground)] hover:opacity-100"
         aria-label="Rename task"
         title="Rename task"
       >

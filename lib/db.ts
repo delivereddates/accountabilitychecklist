@@ -117,6 +117,12 @@ export async function deleteTask(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Delete a user; cascades to their tasks and all completion history (FK cascade). */
+export async function deleteUser(id: string): Promise<void> {
+  const { error } = await admin().from("users").delete().eq("id", id);
+  if (error) throw error;
+}
+
 /** Upsert the status of one task on one date (UNIQUE(task_id, date)). */
 export async function setCompletion(
   taskId: string,
