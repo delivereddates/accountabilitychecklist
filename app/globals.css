@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f6f7f9;
+  --foreground: #111827;
+  --card: #ffffff;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-muted: var(--muted);
+  --color-border: var(--border);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+
+  /* Completion-status palette ------------------------------------------- */
+  --color-check: #16a34a;       /* green  — done            */
+  --color-check-soft: #dcfce7;
+  --color-nocheck: #ef4444;     /* red    — missed          */
+  --color-nocheck-soft: #fee2e2;
+  --color-exempt: #f59e0b;      /* amber  — vacation/ill    */
+  --color-exempt-soft: #fef3c7;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), Arial, Helvetica, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Thin, subtle scrollbars for dense grids. */
+* {
+  scrollbar-width: thin;
+}
