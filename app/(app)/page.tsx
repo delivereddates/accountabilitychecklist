@@ -1,7 +1,6 @@
-import { addDays } from "date-fns";
 import { DailyEditor } from "@/components/daily/DailyEditor";
 import { getDashboardData } from "@/lib/db";
-import { fromISODate, toISODate } from "@/lib/utils";
+import { toISODate } from "@/lib/utils";
 
 export const dynamic = "force-dynamic";
 
@@ -14,14 +13,12 @@ export default async function DailyPage({
 }) {
   const sp = await searchParams;
   const todayISO = toISODate(new Date());
-  const selectedISO =
-    sp.date && DATE_RE.test(sp.date) ? sp.date : todayISO;
-  const prevISO = toISODate(addDays(fromISODate(selectedISO), -1));
+  const selectedISO = sp.date && DATE_RE.test(sp.date) ? sp.date : todayISO;
 
-  // Fetch the contiguous [prev, selected] window so both columns have data.
-  const [from, to] =
-    prevISO < selectedISO ? [prevISO, selectedISO] : [selectedISO, prevISO];
-  const { users, tasks, completions } = await getDashboardData(from, to);
+  const { users, tasks, completions } = await getDashboardData(
+    selectedISO,
+    selectedISO,
+  );
 
   return (
     <DailyEditor
@@ -30,7 +27,6 @@ export default async function DailyPage({
       tasks={tasks}
       completions={completions}
       selectedDate={selectedISO}
-      prevDate={prevISO}
       todayISO={todayISO}
     />
   );

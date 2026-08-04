@@ -3,15 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, format, isToday, isYesterday, parseISO } from "date-fns";
-import {
-  ChevronLeft,
-  ChevronRight,
-  Inbox,
-  Pencil,
-  Plus,
-  Trash2,
-} from "lucide-react";
-import { cn, toISODate } from "@/lib/utils";
+import { ChevronLeft, ChevronRight, Inbox, Pencil, Plus, Trash2 } from "lucide-react";
+import { toISODate } from "@/lib/utils";
 import type { CompletionStatus, Task, TaskCompletion, User } from "@/lib/types";
 import { scoreFromStatuses, tasksActiveOnDate, type Score } from "@/lib/scoring";
 import { percentColor } from "@/lib/colors";
@@ -22,7 +15,6 @@ interface Props {
   tasks: Task[];
   completions: TaskCompletion[];
   selectedDate: string;
-  prevDate: string;
   todayISO: string;
 }
 
@@ -30,7 +22,7 @@ const keyOf = (date: string, taskId: string) => `${date}::${taskId}`;
 
 export function DailyEditor(props: Props) {
   const router = useRouter();
-  const { selectedDate, prevDate } = props;
+  const { selectedDate } = props;
 
   const [users, setUsers] = useState<User[]>(props.users);
   const [tasks, setTasks] = useState<Task[]>(props.tasks);
@@ -42,9 +34,10 @@ export function DailyEditor(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [newUserName, setNewUserName] = useState("");
 
-  // undefined = no row recorded ("no data"); distinct from explicit 'no_check'.
-  const statusOf = (dateISO: string, taskId: string): CompletionStatus | undefined =>
-    map.get(keyOf(dateISO, taskId));
+  const statusOf = (
+    dateISO: string,
+    taskId: string,
+  ): CompletionStatus | undefined => map.get(keyOf(dateISO, taskId));
 
   const scoreForUser = (userId: string, dateISO: string): Score => {
     const active = tasksActiveOnDate(
@@ -57,8 +50,6 @@ export function DailyEditor(props: Props) {
     const active = tasksActiveOnDate(tasks, dateISO);
     return scoreFromStatuses(active.map((t) => statusOf(dateISO, t.id)));
   };
-
-  // --- mutations -----------------------------------------------------------
 
   async function setStatus(
     dateISO: string,
@@ -91,7 +82,6 @@ export function DailyEditor(props: Props) {
       }
       return;
     }
-
     if (prev === status) return;
     setMap((m) => {
       const n = new Map(m);
@@ -117,8 +107,6 @@ export function DailyEditor(props: Props) {
     }
   }
 
-  // After structural changes, refresh the server cache so navigating away and
-  // back shows fresh data (avoids "disappears until reload").
   function refreshServer() {
     router.refresh();
   }
@@ -212,8 +200,6 @@ export function DailyEditor(props: Props) {
     }
   }
 
-  // --- navigation ----------------------------------------------------------
-
   function goToDate(iso: string) {
     router.push(`/?date=${encodeURIComponent(iso)}`);
   }
@@ -221,24 +207,26 @@ export function DailyEditor(props: Props) {
     goToDate(toISODate(addDays(parseISO(selectedDate), days)));
   }
 
-  const selLabel = dateLabel(selectedDate);
-  const prevLabel = dateLabel(prevDate);
+  const overall = scoreForAll(selectedDate);
+  const overallPct =
+    overall.percent == null ? null : Math.round(overall.percent * 100);
+  const overallColor = percentColor(overall.percent);
 
   return (
-    <div className="space-y-5">
+    <div className="space-y-4">
       {error && (
         <div className="rounded-lg border border-[var(--color-nocheck-soft)] bg-[var(--color-nocheck-soft)] px-3 py-2 text-sm text-[var(--color-nocheck)]">
           {error}
         </div>
       )}
 
-      {/* Header + date navigation */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h1 className="text-xl font-semibold tracking-tight">Daily Summary</h1>
-        <div className="flex items-center gap-1.5">
+      {/* One-line header: date nav + overall % */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <h1 className="shrink-0 text-lg font-semibold tracking-tight">Daily</h1>
+        <div className="ml-auto flex items-center gap-1.5">
           <button
             onClick={() => shift(-1)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
             aria-label="Previous day"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -247,32 +235,38 @@ export function DailyEditor(props: Props) {
             type="date"
             value={selectedDate}
             onChange={(e) => e.target.value && goToDate(e.target.value)}
-            className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
+            className="h-9 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
           />
           <button
             onClick={() => shift(1)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
             aria-label="Next day"
           >
             <ChevronRight className="h-4 w-4" />
           </button>
           <button
             onClick={() => goToDate(props.todayISO)}
-            className="ml-1 h-9 rounded-lg border border-[var(--border)] px-3 text-base font-medium hover:bg-black/5"
+            className="h-9 shrink-0 rounded-lg border border-[var(--border)] px-3 text-base font-medium hover:bg-black/5"
           >
             Today
           </button>
+          <span
+            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm"
+            style={{
+              borderColor: `color-mix(in srgb, ${overallColor} 40%, transparent)`,
+            }}
+            title="Overall completion for this day"
+          >
+            <span className="font-semibold" style={{ color: overallColor }}>
+              {overallPct == null ? "—" : `${overallPct}%`}
+            </span>
+            <span className="text-xs text-[var(--muted)]">
+              {overall.check}/{overall.denominator}
+            </span>
+          </span>
         </div>
       </div>
 
-      {/* Day-level score chips */}
-      <div className="flex flex-wrap items-center gap-2">
-        <DayScoreChip label={selLabel} score={scoreForAll(selectedDate)} />
-        <span className="text-[var(--muted)]">vs</span>
-        <DayScoreChip label={prevLabel} score={scoreForAll(prevDate)} muted />
-      </div>
-
-      {/* User cards */}
       {users.length === 0 ? (
         <EmptyState
           value={newUserName}
@@ -287,11 +281,8 @@ export function DailyEditor(props: Props) {
               user={u}
               tasks={tasks.filter((t) => t.user_id === u.id)}
               selectedDate={selectedDate}
-              prevDate={prevDate}
-              selLabel={selLabel}
-              prevLabel={prevLabel}
               statusOf={statusOf}
-              scoreForDate={(d) => scoreForUser(u.id, d)}
+              score={() => scoreForUser(u.id, selectedDate)}
               onSetStatus={setStatus}
               onRenameTask={renameTask}
               onDeleteTask={deleteTask}
@@ -299,7 +290,6 @@ export function DailyEditor(props: Props) {
               onDeleteUser={() => deleteUser(u.id, u.name)}
             />
           ))}
-
           <AddUserForm
             value={newUserName}
             onChange={setNewUserName}
@@ -315,63 +305,19 @@ export function DailyEditor(props: Props) {
 // Sub-components (module scope so they keep state across parent re-renders)
 // ---------------------------------------------------------------------------
 
-interface DateLabel {
-  primary: string;
-  secondary: string;
-}
-
-function dateLabel(iso: string): DateLabel {
+function shortDateLabel(iso: string): string {
   const d = parseISO(iso);
-  if (isToday(d)) return { primary: "Today", secondary: format(d, "MMM d") };
-  if (isYesterday(d))
-    return { primary: "Yesterday", secondary: format(d, "MMM d") };
-  return { primary: format(d, "EEE"), secondary: format(d, "MMM d") };
-}
-
-function DayScoreChip({
-  label,
-  score,
-  muted,
-}: {
-  label: DateLabel;
-  score: Score;
-  muted?: boolean;
-}) {
-  const pct = score.percent == null ? null : Math.round(score.percent * 100);
-  const color = percentColor(score.percent);
-  return (
-    <span
-      className={cn(
-        "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm",
-        muted && "opacity-90",
-      )}
-      style={{
-        borderColor: `color-mix(in srgb, ${color} 40%, transparent)`,
-      }}
-    >
-      <span>
-        <span className="font-semibold">{label.primary}</span>{" "}
-        <span className="text-[var(--muted)]">{label.secondary}</span>
-      </span>
-      <span className="font-semibold" style={{ color }}>
-        {pct == null ? "—" : `${pct}%`}
-      </span>
-      <span className="text-xs text-[var(--muted)]">
-        {score.check}/{score.denominator}
-      </span>
-    </span>
-  );
+  if (isToday(d)) return "Today";
+  if (isYesterday(d)) return "Yest.";
+  return format(d, "EEE");
 }
 
 function UserCard({
   user,
   tasks,
   selectedDate,
-  prevDate,
-  selLabel,
-  prevLabel,
   statusOf,
-  scoreForDate,
+  score,
   onSetStatus,
   onRenameTask,
   onDeleteTask,
@@ -381,11 +327,8 @@ function UserCard({
   user: User;
   tasks: Task[];
   selectedDate: string;
-  prevDate: string;
-  selLabel: DateLabel;
-  prevLabel: DateLabel;
   statusOf: (dateISO: string, taskId: string) => CompletionStatus | undefined;
-  scoreForDate: (dateISO: string) => Score;
+  score: () => Score;
   onSetStatus: (
     dateISO: string,
     taskId: string,
@@ -396,12 +339,12 @@ function UserCard({
   onAddTask: (title: string) => Promise<boolean>;
   onDeleteUser: () => void;
 }) {
-  const selScore = scoreForDate(selectedDate);
-  const prevScore = scoreForDate(prevDate);
+  const s = score();
+  const pct = s.percent == null ? null : Math.round(s.percent * 100);
 
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
-      <header className="mb-2 flex flex-wrap items-center justify-between gap-2">
+      <header className="mb-2 flex items-center justify-between gap-2">
         <div className="flex items-center gap-1">
           <h2 className="text-base font-semibold">{user.name}</h2>
           <button
@@ -413,10 +356,7 @@ function UserCard({
             <Trash2 className="h-4 w-4" />
           </button>
         </div>
-        <div className="flex items-center gap-1.5">
-          <MiniScore label={selLabel.primary} score={selScore} />
-          <MiniScore label={prevLabel.primary} score={prevScore} />
-        </div>
+        <MiniScore label={shortDateLabel(selectedDate)} score={s} pct={pct} />
       </header>
 
       {tasks.length === 0 ? (
@@ -430,11 +370,7 @@ function UserCard({
               key={task.id}
               task={task}
               selectedDate={selectedDate}
-              prevDate={prevDate}
-              selLabel={selLabel}
-              prevLabel={prevLabel}
-              selStatus={statusOf(selectedDate, task.id)}
-              prevStatus={statusOf(prevDate, task.id)}
+              status={statusOf(selectedDate, task.id)}
               onSetStatus={onSetStatus}
               onRename={onRenameTask}
               onDelete={onDeleteTask}
@@ -448,8 +384,15 @@ function UserCard({
   );
 }
 
-function MiniScore({ label, score }: { label: string; score: Score }) {
-  const pct = score.percent == null ? null : Math.round(score.percent * 100);
+function MiniScore({
+  label,
+  score,
+  pct,
+}: {
+  label: string;
+  score: Score;
+  pct: number | null;
+}) {
   const color = percentColor(score.percent);
   return (
     <span
@@ -468,22 +411,14 @@ function MiniScore({ label, score }: { label: string; score: Score }) {
 function TaskRow({
   task,
   selectedDate,
-  prevDate,
-  selLabel,
-  prevLabel,
-  selStatus,
-  prevStatus,
+  status,
   onSetStatus,
   onRename,
   onDelete,
 }: {
   task: Task;
   selectedDate: string;
-  prevDate: string;
-  selLabel: DateLabel;
-  prevLabel: DateLabel;
-  selStatus: CompletionStatus | undefined;
-  prevStatus: CompletionStatus | undefined;
+  status: CompletionStatus | undefined;
   onSetStatus: (
     dateISO: string,
     taskId: string,
@@ -492,67 +427,33 @@ function TaskRow({
   onRename: (taskId: string, title: string) => Promise<boolean>;
   onDelete: (taskId: string) => void;
 }) {
-  const activeSel = tasksActiveOnDate([task], selectedDate).length > 0;
-  const activePrev = tasksActiveOnDate([task], prevDate).length > 0;
+  const active = tasksActiveOnDate([task], selectedDate).length > 0;
 
   return (
-    <li className="group flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-[var(--border)] py-2.5 first:border-t-0">
-      <div className="flex min-w-[9rem] flex-1 items-center gap-2">
+    <li className="group flex items-center gap-2 border-t border-[var(--border)] py-2.5 first:border-t-0">
+      <div className="flex min-w-0 flex-1 items-center gap-1">
         <TaskTitle title={task.title} onRename={(t) => onRename(task.id, t)} />
         <button
           onClick={() => onDelete(task.id)}
-          className="rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--color-nocheck)] hover:opacity-100"
+          className="shrink-0 rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--color-nocheck)] hover:opacity-100"
           aria-label="Delete task"
           title="Delete task"
         >
           <Trash2 className="h-3.5 w-3.5" />
         </button>
       </div>
-
-      <LabeledToggle
-        label={`${selLabel.primary} · ${selLabel.secondary}`}
-        active={activeSel}
-        status={selStatus}
-        onChange={(s) => onSetStatus(selectedDate, task.id, s)}
-      />
-      <LabeledToggle
-        label={`${prevLabel.primary} · ${prevLabel.secondary}`}
-        active={activePrev}
-        status={prevStatus}
-        onChange={(s) => onSetStatus(prevDate, task.id, s)}
-      />
-    </li>
-  );
-}
-
-function LabeledToggle({
-  label,
-  active,
-  status,
-  onChange,
-}: {
-  label: string;
-  active: boolean;
-  status: CompletionStatus | undefined;
-  onChange: (status: CompletionStatus | null) => void;
-}) {
-  if (!active) {
-    return (
-      <div className="flex min-w-[7rem] flex-col gap-0.5 opacity-40">
-        <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
-          {label}
+      {active ? (
+        <ThreeWayToggle
+          value={status ?? null}
+          onChange={(s) => onSetStatus(selectedDate, task.id, s)}
+          size="sm"
+        />
+      ) : (
+        <span className="shrink-0 pr-2 text-xs text-[var(--muted)] opacity-40">
+          —
         </span>
-        <span className="h-7 text-xs text-[var(--muted)]">—</span>
-      </div>
-    );
-  }
-  return (
-    <div className="flex min-w-[7rem] flex-col gap-0.5">
-      <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
-        {label}
-      </span>
-      <ThreeWayToggle value={status ?? null} onChange={onChange} size="sm" />
-    </div>
+      )}
+    </li>
   );
 }
 
@@ -594,8 +495,7 @@ function TaskTitle({
   }
 
   return (
-    <span className="flex min-w-0 items-center gap-1.5">
-      <span className="truncate text-sm">{title}</span>
+    <span className="flex min-w-0 items-center gap-1">
       <button
         onClick={() => {
           setDraft(title);
@@ -607,6 +507,7 @@ function TaskTitle({
       >
         <Pencil className="h-3.5 w-3.5" />
       </button>
+      <span className="truncate text-sm">{title}</span>
     </span>
   );
 }
@@ -636,7 +537,7 @@ function AddTaskForm({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) 
       <button
         type="submit"
         disabled={busy || !title.trim()}
-        className="inline-flex h-9 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-sm font-medium text-white disabled:opacity-50"
+        className="inline-flex h-9 shrink-0 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-sm font-medium text-white disabled:opacity-50"
       >
         <Plus className="h-4 w-4" /> Add
       </button>
@@ -667,7 +568,7 @@ function AddUserForm({
       <button
         type="submit"
         disabled={!value.trim()}
-        className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-check)] px-3 text-sm font-semibold text-white disabled:opacity-50"
+        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[var(--color-check)] px-3 text-sm font-semibold text-white disabled:opacity-50"
       >
         <Plus className="h-4 w-4" /> Add user
       </button>

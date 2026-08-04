@@ -48,25 +48,20 @@ export function WeekView(props: Props) {
 
   return (
     <div className="space-y-4">
-      {/* Header + controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Week Summary</h1>
-          <p className="text-sm text-[var(--muted)]">
-            {days[0]} → {days[days.length - 1]}
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      {/* One-line header */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <h1 className="shrink-0 text-lg font-semibold tracking-tight">Week</h1>
+        <div className="ml-auto flex items-center gap-1.5">
           <ModeToggle
             mode={mode}
             onChange={(m) => go(anchorISO, m)}
-            rollingLabel="Last 7 days"
+            rollingLabel="Last 7"
             calendarLabel="Mon–Sun"
           />
           <div className="flex items-center gap-1">
             <button
               onClick={() => shift(-7)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
               aria-label="Previous week"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -75,11 +70,11 @@ export function WeekView(props: Props) {
               type="date"
               value={anchorISO}
               onChange={(e) => e.target.value && go(e.target.value, mode)}
-              className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
+              className="h-9 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
             />
             <button
               onClick={() => shift(7)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
               aria-label="Next week"
             >
               <ChevronRight className="h-4 w-4" />
@@ -145,13 +140,13 @@ export function WeekView(props: Props) {
               const userTasks = tasks.filter((t) => t.user_id === u.id);
               return (
                 <Fragment key={u.id}>
-                  <tr className="bg-black/[0.03] [&>td]:border-t [&>td]:border-[var(--border)]">
-                    <td
-                      colSpan={days.length + 1}
-                      className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]"
-                    >
+                  <tr className="bg-[#f3f4f6] [&>td]:border-t [&>td]:border-[var(--border)]">
+                    <td className="sticky left-0 z-10 bg-[#f3f4f6] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                       {u.name}
                     </td>
+                    {days.map((d) => (
+                      <td key={d} />
+                    ))}
                   </tr>
                   {userTasks.length === 0 ? (
                     <tr className="[&>td]:border-t [&>td]:border-[var(--border)]">

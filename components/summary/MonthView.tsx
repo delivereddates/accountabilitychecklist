@@ -48,32 +48,24 @@ export function MonthView(props: Props) {
     go(toISODate(next), mode);
   };
 
-  const subtitle =
-    mode === "calendar"
-      ? format(parseISO(anchorISO), "MMMM yyyy")
-      : `${days[0]} → ${days[days.length - 1]}`;
-
   const trailing = (7 - ((leadOffset + days.length) % 7)) % 7;
 
   return (
     <div className="space-y-4">
-      {/* Header + controls */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Month Summary</h1>
-          <p className="text-sm text-[var(--muted)]">{subtitle}</p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
+      {/* One-line header */}
+      <div className="flex items-center gap-2 overflow-x-auto pb-1">
+        <h1 className="shrink-0 text-lg font-semibold tracking-tight">Month</h1>
+        <div className="ml-auto flex items-center gap-1.5">
           <ModeToggle
             mode={mode}
             onChange={(m) => go(anchorISO, m)}
-            rollingLabel="Last 30 days"
-            calendarLabel="Calendar month"
+            rollingLabel="Last 30"
+            calendarLabel="Month"
           />
           <div className="flex items-center gap-1">
             <button
               onClick={() => shift(-1)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
               aria-label="Previous"
             >
               <ChevronLeft className="h-4 w-4" />
@@ -85,11 +77,11 @@ export function MonthView(props: Props) {
                 const v = e.target.value; // YYYY-MM
                 if (/^\d{4}-\d{2}$/.test(v)) go(`${v}-01`, mode);
               }}
-              className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm outline-none focus:border-[var(--color-check)]"
+              className="h-9 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
             />
             <button
               onClick={() => shift(1)}
-              className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
+              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
               aria-label="Next"
             >
               <ChevronRight className="h-4 w-4" />
