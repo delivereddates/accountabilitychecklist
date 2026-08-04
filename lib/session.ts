@@ -1,18 +1,31 @@
-import { cookies } from "next/headers";
-import { getIronSession, type SessionOptions } from "iron-session";
+import type { SessionOptions } from "iron-session";
 
 export interface SessionData {
   isLoggedIn: boolean;
 }
 
 /**
- * iron-session config.
- * - cookieName matches the spec.
- * - password (>= 32 chars) encrypts the cookie.
- * - httpOnly + sameSite=lax; secure in production (requires HTTPS, e.g. Vercel).
+ * iron-session requires a password of at least 32 characters. If it is missing
+ * (e.g. not set in the Vercel environment), throw a descriptive error instead
+ * of letting iron-session fail opaquely inside middleware.
+ *
+ * NOTE: keep this module free of `next/headers` and other server-only imports —
+ * it is imported by `middleware.ts`, which runs on the Edge Runtime.
  */
+function readSessionSecret(): string {
+  const secret = process.env.SESSION_SECRET;
+  if (!secret || secret.length < 32) {
+    throw new Error(
+      "SESSION_SECRET is missing or shorter than 32 characters. " +
+        "Add it under Vercel → Settings → Environment Variables (Production) " +
+        "and redeploy.",
+    );
+  }
+  return secret;
+}
+
 export const sessionOptions: SessionOptions = {
-  password: process.env.SESSION_SECRET!,
+  password: readSessionSecret(),
   cookieName: "checklist_session",
   cookieOptions: {
     httpOnly: true,
@@ -22,21 +35,3 @@ export const sessionOptions: SessionOptions = {
     maxAge: 60 * 60 * 24 * 30, // 30 days
   },
 };
-
-/**
- * Get the session for Server Components and Route Handlers (Node runtime).
- * In `middleware.ts` use `getIronSession(req, res, sessionOptions)` instead —
- * `next/headers` cookies() is not available there.
- */
-export async function getSession(): Promise<
-  Awaited<ReturnType<typeof getIronSession<SessionData>>>
-> {
-  const session = await getIronSession<SessionData>(
-    await cookies(),
-    sessionOptions,
-  );
-  if (!session.isLoggedIn) {
-    session.isLoggedIn = false;
-  }
-  return session;
-}
