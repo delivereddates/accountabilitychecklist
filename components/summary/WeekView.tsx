@@ -4,7 +4,7 @@ import { Fragment, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, format, isToday, parseISO } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { toISODate } from "@/lib/utils";
+import { cn, toISODate } from "@/lib/utils";
 import type { WindowMode } from "@/lib/dates";
 import {
   buildCompletionIndex,
@@ -23,11 +23,12 @@ interface Props {
   days: string[];
   anchorISO: string;
   mode: WindowMode;
+  todayISO: string;
 }
 
 export function WeekView(props: Props) {
   const router = useRouter();
-  const { users, tasks, days, anchorISO, mode } = props;
+  const { users, tasks, days, anchorISO, mode, todayISO } = props;
 
   const index = useMemo(
     () => buildCompletionIndex(props.completions),
@@ -40,6 +41,10 @@ export function WeekView(props: Props) {
   }
   const shift = (n: number) =>
     go(toISODate(addDays(parseISO(anchorISO), n)), mode);
+
+  // status for a task/day; future days and missing rows are "no data" (undefined)
+  const statusFor = (taskId: string, iso: string, future: boolean) =>
+    future ? undefined : getStatus(index, taskId, iso);
 
   return (
     <div className="space-y-4">
@@ -70,7 +75,7 @@ export function WeekView(props: Props) {
               type="date"
               value={anchorISO}
               onChange={(e) => e.target.value && go(e.target.value, mode)}
-              className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm outline-none focus:border-[var(--color-check)]"
+              className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
             />
             <button
               onClick={() => shift(7)}
@@ -85,34 +90,31 @@ export function WeekView(props: Props) {
 
       <StatusLegend />
 
-      {/* Matrix */}
+      {/* Matrix — border-separate makes sticky columns reliable. */}
       <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
-        <table className="w-full border-collapse text-sm">
+        <table className="w-full border-separate border-spacing-0 text-sm">
           <thead>
-            <tr className="border-b border-[var(--border)]">
+            <tr className="[&>th]:border-b [&>th]:border-[var(--border)]">
               <th className="sticky left-0 z-10 bg-[var(--card)] px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
                 Task
               </th>
               {days.map((d) => {
                 const dt = parseISO(d);
                 const today = isToday(dt);
+                const future = d > todayISO;
                 const overall = scoreOverallDate(tasks, index, d);
                 const pct =
                   overall.percent == null
                     ? null
                     : Math.round(overall.percent * 100);
                 return (
-                  <th
-                    key={d}
-                    className="px-2 py-2 text-center align-bottom"
-                  >
+                  <th key={d} className="px-2 py-2 text-center align-bottom">
                     <div className="flex flex-col items-center gap-0.5">
                       <span
-                        className={
-                          today
-                            ? "font-bold text-[var(--color-check)]"
-                            : "font-medium"
-                        }
+                        className={cn(
+                          today && "font-bold text-[var(--color-check)]",
+                          !today && "font-medium",
+                        )}
                       >
                         {format(dt, "EEEEE")}
                       </span>
@@ -120,7 +122,7 @@ export function WeekView(props: Props) {
                         {format(dt, "d")}
                       </span>
                       <span className="text-[10px] text-[var(--muted)]">
-                        {pct == null ? "—" : `${pct}%`}
+                        {future || pct == null ? "—" : `${pct}%`}
                       </span>
                     </div>
                   </th>
@@ -143,7 +145,7 @@ export function WeekView(props: Props) {
               const userTasks = tasks.filter((t) => t.user_id === u.id);
               return (
                 <Fragment key={u.id}>
-                  <tr className="border-t border-[var(--border)] bg-black/[0.02]">
+                  <tr className="bg-black/[0.03] [&>td]:border-t [&>td]:border-[var(--border)]">
                     <td
                       colSpan={days.length + 1}
                       className="px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]"
@@ -152,7 +154,7 @@ export function WeekView(props: Props) {
                     </td>
                   </tr>
                   {userTasks.length === 0 ? (
-                    <tr>
+                    <tr className="[&>td]:border-t [&>td]:border-[var(--border)]">
                       <td
                         colSpan={days.length + 1}
                         className="px-3 py-2 text-xs text-[var(--muted)]"
@@ -164,14 +166,14 @@ export function WeekView(props: Props) {
                     userTasks.map((t) => (
                       <tr
                         key={t.id}
-                        className="border-t border-[var(--border)]"
+                        className="[&>td]:border-t [&>td]:border-[var(--border)]"
                       >
                         <td className="sticky left-0 z-10 max-w-[14rem] truncate bg-[var(--card)] px-3 py-2 font-medium">
                           {t.title}
                         </td>
                         {days.map((d) => {
-                          const active =
-                            tasksActiveOnDate([t], d).length > 0;
+                          const future = d > todayISO;
+                          const active = tasksActiveOnDate([t], d).length > 0;
                           return (
                             <td
                               key={d}
@@ -179,11 +181,13 @@ export function WeekView(props: Props) {
                             >
                               {active ? (
                                 <StatusGlyph
-                                  status={getStatus(index, t.id, d)}
+                                  status={statusFor(t.id, d, future)}
                                   className="mx-auto h-4 w-4"
                                 />
                               ) : (
-                                <span className="text-[var(--muted)]">·</span>
+                                <span className="text-[var(--muted)] opacity-40">
+                                  ·
+                                </span>
                               )}
                             </td>
                           );

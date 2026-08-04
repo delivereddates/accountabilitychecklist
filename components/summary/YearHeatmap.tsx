@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, addYears, format, parseISO } from "date-fns";
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -9,6 +9,7 @@ import type { WindowMode } from "@/lib/dates";
 import {
   buildCompletionIndex,
   scoreUserDate,
+  type CompletionIndex,
   type Score,
 } from "@/lib/scoring";
 import { percentColor } from "@/lib/colors";
@@ -27,9 +28,9 @@ interface Props {
 const SIZE = 560;
 const CX = SIZE / 2;
 const CY = SIZE / 2;
-const INNER_R0 = 64; // inner radius of the innermost (first) user ring
+const INNER_R0 = 64;
 const RING_GAP = 1.5;
-const OUTER_PAD = 26; // padding for month labels
+const OUTER_PAD = 26;
 
 function polar(r: number, a: number): [number, number] {
   return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
@@ -56,16 +57,21 @@ export function YearHeatmap(props: Props) {
   const [hover, setHover] = useState<{ iso: string; userId: string } | null>(
     null,
   );
+  // Stable callback so the memoized <Segments> doesn't re-render on hover.
+  const handleHover = useCallback(
+    (iso: string, userId: string) => setHover({ iso, userId }),
+    [],
+  );
+  const clearHover = useCallback(() => setHover(null), []);
 
   const N = Math.max(1, users.length);
   const outerMax = SIZE / 2 - OUTER_PAD;
   const ringWidth = (outerMax - INNER_R0) / N;
-
   const total = Math.max(1, days.length);
-  const angleHalf = (Math.PI * 2) / total / 2; // half a wedge for the gap
-  const startOffset = -Math.PI / 2; // 12 o'clock
+  const angleHalf = (Math.PI * 2) / total / 2;
+  const startOffset = -Math.PI / 2;
 
-  function sectorPath(dayIndex: number, ringIndex: number) {
+  const sectorPath = (dayIndex: number, ringIndex: number) => {
     const a0 = (dayIndex / total) * Math.PI * 2 + startOffset + angleHalf * 0.4;
     const a1 =
       ((dayIndex + 1) / total) * Math.PI * 2 + startOffset - angleHalf * 0.4;
@@ -83,9 +89,8 @@ export function YearHeatmap(props: Props) {
     )},${y3.toFixed(2)} A${r0.toFixed(2)},${r0.toFixed(2)} 0 ${large} 0 ${x4.toFixed(
       2,
     )},${y4.toFixed(2)} Z`;
-  }
+  };
 
-  // Month boundary labels (placed at the 1st of each month present in the window).
   const monthMarks: { i: number; label: string; angle: number }[] = [];
   for (let i = 0; i < days.length; i++) {
     const dt = parseISO(days[i]);
@@ -145,7 +150,7 @@ export function YearHeatmap(props: Props) {
                 const y = parseInt(e.target.value, 10);
                 if (!Number.isNaN(y)) go(`${y}-01-01`, "calendar");
               }}
-              className="h-9 w-20 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-center text-sm outline-none focus:border-[var(--color-check)]"
+              className="h-9 w-20 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-center text-base outline-none focus:border-[var(--color-check)]"
             />
             <button
               onClick={() => shift(1)}
@@ -164,16 +169,14 @@ export function YearHeatmap(props: Props) {
         </p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
-          {/* Heatmap */}
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-2">
             <svg
               viewBox={`0 0 ${SIZE} ${SIZE}`}
               role="img"
               aria-label="Yearly completion heatmap, one ring per user"
               className="mx-auto block h-auto w-full max-w-[560px]"
-              onMouseLeave={() => setHover(null)}
+              onMouseLeave={clearHover}
             >
-              {/* center hub */}
               <circle
                 cx={CX}
                 cy={CY}
@@ -182,7 +185,6 @@ export function YearHeatmap(props: Props) {
                 stroke="var(--border)"
               />
 
-              {/* month labels */}
               {monthMarks.map((m, idx) => {
                 const [x, y] = polar(outerMax + 14, m.angle);
                 return (
@@ -200,38 +202,16 @@ export function YearHeatmap(props: Props) {
                 );
               })}
 
-              {/* segments */}
-              {days.map((iso, di) =>
-                userTasks.map(({ user, tasks: ut }, ri) => {
-                  const score = scoreUserDate(ut, index, iso);
-                  const pct =
-                    score.percent == null
-                      ? null
-                      : Math.round(score.percent * 100);
-                  const isHover = hover?.iso === iso && hover?.userId === user.id;
-                  return (
-                    <path
-                      key={`${iso}-${user.id}`}
-                      d={sectorPath(di, ri)}
-                      fill={percentColor(score.percent)}
-                      stroke={isHover ? "#111827" : "#ffffff"}
-                      strokeWidth={isHover ? 1.4 : 0.4}
-                      onMouseEnter={() => setHover({ iso, userId: user.id })}
-                      style={{ cursor: "pointer" }}
-                    >
-                      <title>
-                        {format(parseISO(iso), "EEE, MMM d, yyyy")} · {user.name}:{" "}
-                        {pct == null ? "no data" : `${pct}%`} (
-                        {score.check}/{score.denominator})
-                      </title>
-                    </path>
-                  );
-                }),
-              )}
+              <Segments
+                days={days}
+                userTasks={userTasks}
+                index={index}
+                sectorPath={sectorPath}
+                onHover={handleHover}
+              />
             </svg>
           </div>
 
-          {/* Side panel: legend + hovered-day detail */}
           <aside className="space-y-3">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
               <h3 className="mb-1 text-sm font-semibold">Rings (inner → outer)</h3>
@@ -247,11 +227,7 @@ export function YearHeatmap(props: Props) {
               </ol>
             </div>
 
-            <HoverDetail
-              hover={hover}
-              userTasks={userTasks}
-              index={index}
-            />
+            <HoverDetail hover={hover} userTasks={userTasks} index={index} />
 
             <ColorScale />
           </aside>
@@ -261,6 +237,48 @@ export function YearHeatmap(props: Props) {
   );
 }
 
+/** Memoized so hovering a segment only re-renders the side panel, not the SVG. */
+const Segments = memo(function Segments({
+  days,
+  userTasks,
+  index,
+  sectorPath,
+  onHover,
+}: {
+  days: string[];
+  userTasks: { user: User; tasks: Task[] }[];
+  index: CompletionIndex;
+  sectorPath: (dayIndex: number, ringIndex: number) => string;
+  onHover: (iso: string, userId: string) => void;
+}) {
+  return (
+    <>
+      {days.map((iso, di) =>
+        userTasks.map(({ user, tasks: ut }, ri) => {
+          const score = scoreUserDate(ut, index, iso);
+          return (
+            <path
+              key={`${iso}-${user.id}`}
+              d={sectorPath(di, ri)}
+              fill={percentColor(score.percent)}
+              className="year-seg"
+              onMouseEnter={() => onHover(iso, user.id)}
+            >
+              <title>
+                {format(parseISO(iso), "EEE, MMM d, yyyy")} · {user.name}:{" "}
+                {score.percent == null
+                  ? "no data"
+                  : `${Math.round(score.percent * 100)}%`}{" "}
+                ({score.check}/{score.denominator})
+              </title>
+            </path>
+          );
+        }),
+      )}
+    </>
+  );
+});
+
 function HoverDetail({
   hover,
   userTasks,
@@ -268,7 +286,7 @@ function HoverDetail({
 }: {
   hover: { iso: string; userId: string } | null;
   userTasks: { user: User; tasks: Task[] }[];
-  index: ReturnType<typeof buildCompletionIndex>;
+  index: CompletionIndex;
 }) {
   if (!hover) {
     return (
@@ -335,7 +353,7 @@ function ColorScale() {
         <span>100%</span>
       </div>
       <p className="mt-2 text-xs text-[var(--muted)]">
-        Exempt tasks are excluded from the score. Gray = no data.
+        Gray = no data. Exempt tasks are excluded from the score.
       </p>
     </div>
   );

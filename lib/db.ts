@@ -134,3 +134,16 @@ export async function setCompletion(
   if (error) throw error;
   return data as TaskCompletion;
 }
+
+/** Remove a day's row for a task, returning it to "no data". */
+export async function clearCompletion(
+  taskId: string,
+  dateISO: string,
+): Promise<void> {
+  const { error } = await admin()
+    .from("task_completions")
+    .delete()
+    .eq("task_id", taskId)
+    .eq("date", dateISO);
+  if (error) throw error;
+}

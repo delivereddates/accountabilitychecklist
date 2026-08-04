@@ -7,7 +7,7 @@ export function StatusGlyph({
   status,
   className,
 }: {
-  status: CompletionStatus;
+  status: CompletionStatus | undefined;
   className?: string;
 }) {
   if (status === "check")
@@ -24,10 +24,17 @@ export function StatusGlyph({
         aria-label="Exempt"
       />
     );
+  if (status === "no_check")
+    return (
+      <X
+        className={cn("text-[var(--color-nocheck)]", className)}
+        aria-label="Missed"
+      />
+    );
   return (
-    <X
-      className={cn("text-[var(--color-nocheck)]", className)}
-      aria-label="Missed"
+    <Minus
+      className={cn("text-[var(--muted)] opacity-40", className)}
+      aria-label="No data"
     />
   );
 }
@@ -43,7 +50,7 @@ export function StatusLegend({ className }: { className?: string }) {
       <LegendItem icon={<Check className="h-3.5 w-3.5 text-[var(--color-check)]" />} label="Check" />
       <LegendItem icon={<X className="h-3.5 w-3.5 text-[var(--color-nocheck)]" />} label="Missed" />
       <LegendItem icon={<Plane className="h-3.5 w-3.5 text-[var(--color-exempt)]" />} label="Exempt" />
-      <LegendItem icon={<Minus className="h-3.5 w-3.5 text-[var(--muted)]" />} label="No task yet" />
+      <LegendItem icon={<Minus className="h-3.5 w-3.5 text-[var(--muted)] opacity-40" />} label="No data" />
     </div>
   );
 }

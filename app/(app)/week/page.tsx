@@ -30,6 +30,7 @@ export default async function WeekPage({
       days={days}
       anchorISO={anchor}
       mode={mode}
+      todayISO={toISODate(new Date())}
     />
   );
 }

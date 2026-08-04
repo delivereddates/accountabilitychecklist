@@ -42,3 +42,20 @@ body {
 * {
   scrollbar-width: thin;
 }
+
+/* Prevent iOS auto-zoom on input focus: form controls must be >= 16px.
+   Unlayered so it overrides utility classes like text-sm on inputs. */
+input,
+select,
+textarea {
+  font-size: 16px;
+}
+
+/* Year heatmap segment hover highlight (avoids re-rendering the SVG). */
+.year-seg {
+  transition: stroke-width 0.1s ease;
+}
+.year-seg:hover {
+  stroke: #111827;
+  stroke-width: 1.4;
+}

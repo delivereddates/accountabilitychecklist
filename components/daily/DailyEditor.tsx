@@ -14,6 +14,7 @@ import {
 import { cn, toISODate } from "@/lib/utils";
 import type { CompletionStatus, Task, TaskCompletion, User } from "@/lib/types";
 import { scoreFromStatuses, tasksActiveOnDate, type Score } from "@/lib/scoring";
+import { percentColor } from "@/lib/colors";
 import { ThreeWayToggle } from "./ThreeWayToggle";
 
 interface Props {
@@ -41,8 +42,9 @@ export function DailyEditor(props: Props) {
   const [error, setError] = useState<string | null>(null);
   const [newUserName, setNewUserName] = useState("");
 
-  const statusOf = (dateISO: string, taskId: string): CompletionStatus =>
-    map.get(keyOf(dateISO, taskId)) ?? "no_check";
+  // undefined = no row recorded ("no data"); distinct from explicit 'no_check'.
+  const statusOf = (dateISO: string, taskId: string): CompletionStatus | undefined =>
+    map.get(keyOf(dateISO, taskId));
 
   const scoreForUser = (userId: string, dateISO: string): Score => {
     const active = tasksActiveOnDate(
@@ -61,10 +63,35 @@ export function DailyEditor(props: Props) {
   async function setStatus(
     dateISO: string,
     taskId: string,
-    status: CompletionStatus,
+    status: CompletionStatus | null,
   ) {
     const k = keyOf(dateISO, taskId);
-    const prev = map.get(k) ?? "no_check";
+    const prev = map.get(k);
+    if (status === null) {
+      if (prev === undefined) return;
+      setMap((m) => {
+        const n = new Map(m);
+        n.delete(k);
+        return n;
+      });
+      setError(null);
+      try {
+        const res = await fetch(
+          `/api/completions?task_id=${encodeURIComponent(taskId)}&date=${encodeURIComponent(dateISO)}`,
+          { method: "DELETE" },
+        );
+        if (!res.ok) throw new Error();
+      } catch {
+        setMap((m) => {
+          const n = new Map(m);
+          if (prev) n.set(k, prev);
+          return n;
+        });
+        setError("Couldn’t clear that — reverted.");
+      }
+      return;
+    }
+
     if (prev === status) return;
     setMap((m) => {
       const n = new Map(m);
@@ -82,11 +109,18 @@ export function DailyEditor(props: Props) {
     } catch {
       setMap((m) => {
         const n = new Map(m);
-        n.set(k, prev);
+        if (prev) n.set(k, prev);
+        else n.delete(k);
         return n;
       });
       setError("Couldn’t save that change — reverted.");
     }
+  }
+
+  // After structural changes, refresh the server cache so navigating away and
+  // back shows fresh data (avoids "disappears until reload").
+  function refreshServer() {
+    router.refresh();
   }
 
   async function addUser(e: React.FormEvent) {
@@ -106,6 +140,7 @@ export function DailyEditor(props: Props) {
       const { user } = await res.json();
       setUsers((u) => [...u, user]);
       setNewUserName("");
+      refreshServer();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Couldn’t add user.");
     }
@@ -121,6 +156,7 @@ export function DailyEditor(props: Props) {
       if (!res.ok) throw new Error();
       const { task } = await res.json();
       setTasks((t) => [...t, task]);
+      refreshServer();
       return true;
     } catch {
       setError("Couldn’t add task.");
@@ -138,6 +174,7 @@ export function DailyEditor(props: Props) {
       if (!res.ok) throw new Error();
       const { task } = await res.json();
       setTasks((ts) => ts.map((t) => (t.id === taskId ? task : t)));
+      refreshServer();
       return true;
     } catch {
       setError("Couldn’t rename task.");
@@ -151,6 +188,7 @@ export function DailyEditor(props: Props) {
       const res = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
       if (!res.ok) throw new Error();
       setTasks((ts) => ts.filter((t) => t.id !== taskId));
+      refreshServer();
     } catch {
       setError("Couldn’t delete task.");
     }
@@ -178,13 +216,7 @@ export function DailyEditor(props: Props) {
 
       {/* Header + date navigation */}
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Daily Summary</h1>
-          <p className="text-sm text-[var(--muted)]">
-            Mark each task Check, Missed, or Exempt. Exempt never counts against
-            you.
-          </p>
-        </div>
+        <h1 className="text-xl font-semibold tracking-tight">Daily Summary</h1>
         <div className="flex items-center gap-1.5">
           <button
             onClick={() => shift(-1)}
@@ -197,7 +229,7 @@ export function DailyEditor(props: Props) {
             type="date"
             value={selectedDate}
             onChange={(e) => e.target.value && goToDate(e.target.value)}
-            className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm outline-none focus:border-[var(--color-check)]"
+            className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
           />
           <button
             onClick={() => shift(1)}
@@ -208,7 +240,7 @@ export function DailyEditor(props: Props) {
           </button>
           <button
             onClick={() => goToDate(props.todayISO)}
-            className="ml-1 h-9 rounded-lg border border-[var(--border)] px-3 text-sm font-medium hover:bg-black/5"
+            className="ml-1 h-9 rounded-lg border border-[var(--border)] px-3 text-base font-medium hover:bg-black/5"
           >
             Today
           </button>
@@ -217,16 +249,9 @@ export function DailyEditor(props: Props) {
 
       {/* Day-level score chips */}
       <div className="flex flex-wrap items-center gap-2">
-        <DayScoreChip
-          label={selLabel}
-          score={scoreForAll(selectedDate)}
-        />
+        <DayScoreChip label={selLabel} score={scoreForAll(selectedDate)} />
         <span className="text-[var(--muted)]">vs</span>
-        <DayScoreChip
-          label={prevLabel}
-          score={scoreForAll(prevDate)}
-          muted
-        />
+        <DayScoreChip label={prevLabel} score={scoreForAll(prevDate)} muted />
       </div>
 
       {/* User cards */}
@@ -294,21 +319,16 @@ function DayScoreChip({
   muted?: boolean;
 }) {
   const pct = score.percent == null ? null : Math.round(score.percent * 100);
-  const color =
-    pct == null
-      ? "var(--muted)"
-      : pct >= 100
-        ? "var(--color-check)"
-        : pct >= 50
-          ? "var(--color-exempt)"
-          : "var(--color-nocheck)";
+  const color = percentColor(score.percent);
   return (
     <span
       className={cn(
         "inline-flex items-center gap-2 rounded-lg border px-3 py-1.5 text-sm",
         muted && "opacity-90",
       )}
-      style={{ borderColor: "color-mix(in srgb, " + color + " 35%, transparent)" }}
+      style={{
+        borderColor: `color-mix(in srgb, ${color} 40%, transparent)`,
+      }}
     >
       <span>
         <span className="font-semibold">{label.primary}</span>{" "}
@@ -344,9 +364,13 @@ function UserCard({
   prevDate: string;
   selLabel: DateLabel;
   prevLabel: DateLabel;
-  statusOf: (dateISO: string, taskId: string) => CompletionStatus;
+  statusOf: (dateISO: string, taskId: string) => CompletionStatus | undefined;
   scoreForDate: (dateISO: string) => Score;
-  onSetStatus: (dateISO: string, taskId: string, status: CompletionStatus) => void;
+  onSetStatus: (
+    dateISO: string,
+    taskId: string,
+    status: CompletionStatus | null,
+  ) => void;
   onRenameTask: (taskId: string, title: string) => Promise<boolean>;
   onDeleteTask: (taskId: string) => void;
   onAddTask: (title: string) => Promise<boolean>;
@@ -395,20 +419,13 @@ function UserCard({
 
 function MiniScore({ label, score }: { label: string; score: Score }) {
   const pct = score.percent == null ? null : Math.round(score.percent * 100);
-  const color =
-    pct == null
-      ? "var(--muted)"
-      : pct >= 100
-        ? "var(--color-check)"
-        : pct >= 50
-          ? "var(--color-exempt)"
-          : "var(--color-nocheck)";
+  const color = percentColor(score.percent);
   return (
     <span
       className="inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs"
       style={{
-        color,
-        borderColor: "color-mix(in srgb, " + color + " 35%, transparent)",
+        color: score.percent == null ? "var(--muted)" : color,
+        borderColor: `color-mix(in srgb, ${color} 40%, transparent)`,
       }}
     >
       <span className="opacity-70">{label}</span>
@@ -434,9 +451,13 @@ function TaskRow({
   prevDate: string;
   selLabel: DateLabel;
   prevLabel: DateLabel;
-  selStatus: CompletionStatus;
-  prevStatus: CompletionStatus;
-  onSetStatus: (dateISO: string, taskId: string, status: CompletionStatus) => void;
+  selStatus: CompletionStatus | undefined;
+  prevStatus: CompletionStatus | undefined;
+  onSetStatus: (
+    dateISO: string,
+    taskId: string,
+    status: CompletionStatus | null,
+  ) => void;
   onRename: (taskId: string, title: string) => Promise<boolean>;
   onDelete: (taskId: string) => void;
 }) {
@@ -481,8 +502,8 @@ function LabeledToggle({
 }: {
   label: string;
   active: boolean;
-  status: CompletionStatus;
-  onChange: (status: CompletionStatus) => void;
+  status: CompletionStatus | undefined;
+  onChange: (status: CompletionStatus | null) => void;
 }) {
   if (!active) {
     return (
@@ -499,7 +520,7 @@ function LabeledToggle({
       <span className="text-[10px] uppercase tracking-wide text-[var(--muted)]">
         {label}
       </span>
-      <ThreeWayToggle value={status} onChange={onChange} size="sm" />
+      <ThreeWayToggle value={status ?? null} onChange={onChange} size="sm" />
     </div>
   );
 }
@@ -536,7 +557,7 @@ function TaskTitle({
             setEditing(false);
           }
         }}
-        className="min-w-0 flex-1 rounded border border-[var(--color-check)] px-1.5 py-0.5 text-sm outline-none"
+        className="min-w-0 flex-1 rounded border border-[var(--color-check)] px-1.5 py-0.5 text-base outline-none"
       />
     );
   }
@@ -579,12 +600,12 @@ function AddTaskForm({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) 
         value={title}
         onChange={(e) => setTitle(e.target.value)}
         placeholder="Add a task…"
-        className="h-8 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 text-sm outline-none focus:border-[var(--color-check)]"
+        className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2.5 text-base outline-none focus:border-[var(--color-check)]"
       />
       <button
         type="submit"
         disabled={busy || !title.trim()}
-        className="inline-flex h-8 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-sm font-medium text-white disabled:opacity-50"
+        className="inline-flex h-9 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-sm font-medium text-white disabled:opacity-50"
       >
         <Plus className="h-4 w-4" /> Add
       </button>
@@ -610,7 +631,7 @@ function AddUserForm({
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder="Add a new user (e.g. Oliver)…"
-        className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm outline-none focus:border-[var(--color-check)]"
+        className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-base outline-none focus:border-[var(--color-check)]"
       />
       <button
         type="submit"
@@ -648,7 +669,7 @@ function EmptyState({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           placeholder="User name (e.g. Oliver)"
-          className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm outline-none focus:border-[var(--color-check)]"
+          className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-base outline-none focus:border-[var(--color-check)]"
         />
         <button
           type="submit"

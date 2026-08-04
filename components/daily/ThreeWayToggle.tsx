@@ -41,17 +41,19 @@ export function ThreeWayToggle({
   onChange,
   size = "md",
 }: {
-  value: CompletionStatus;
-  onChange: (status: CompletionStatus) => void;
+  value: CompletionStatus | null;
+  onChange: (status: CompletionStatus | null) => void;
   size?: "sm" | "md";
 }) {
-  const sizing = size === "sm" ? "h-7 px-2 text-xs" : "h-8 px-2.5 text-sm";
+  // grid-cols-3 keeps Check / Missed / Exempt the same width regardless of
+  // label length, so Exempt no longer looks wider than the others.
+  const sizing = size === "sm" ? "h-7 text-xs" : "h-8 text-sm";
 
   return (
     <div
       role="group"
       aria-label="Task status"
-      className="inline-flex items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5"
+      className="inline-grid grid-cols-3 items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5"
     >
       {OPTIONS.map(({ value: v, label, Icon, active, idle }) => {
         const isActive = value === v;
@@ -61,14 +63,15 @@ export function ThreeWayToggle({
             type="button"
             title={label}
             aria-pressed={isActive}
-            onClick={() => onChange(v)}
+            // Clicking the already-active status clears it back to "no data".
+            onClick={() => onChange(isActive ? null : v)}
             className={cn(
-              "inline-flex items-center gap-1 rounded-md font-medium transition-colors",
+              "col-span-1 inline-flex items-center justify-center gap-1 rounded-md px-1 font-medium transition-colors",
               sizing,
               isActive ? active : cn("bg-transparent", idle),
             )}
           >
-            <Icon className="h-3.5 w-3.5" />
+            <Icon className="h-3.5 w-3.5 shrink-0" />
             <span className="hidden md:inline">{label}</span>
           </button>
         );
