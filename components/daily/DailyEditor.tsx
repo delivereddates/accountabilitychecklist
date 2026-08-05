@@ -1,213 +1,108 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
 import { addDays, format, isToday, isYesterday, parseISO } from "date-fns";
 import { ChevronLeft, ChevronRight, Inbox, Pencil, Plus, Trash2 } from "lucide-react";
 import { toISODate } from "@/lib/utils";
-import type { CompletionStatus, Task, TaskCompletion, User } from "@/lib/types";
-import { scoreFromStatuses, tasksActiveOnDate, type Score } from "@/lib/scoring";
+import type { CompletionStatus, Task, User } from "@/lib/types";
+import {
+  buildCompletionIndex,
+  getStatus,
+  scoreFromStatuses,
+  tasksActiveOnDate,
+  type Score,
+} from "@/lib/scoring";
 import { percentColor } from "@/lib/colors";
+import type { DashboardData } from "@/lib/use-dashboard";
+import { useMutations } from "@/lib/swr-mutations";
 import { ThreeWayToggle } from "./ThreeWayToggle";
 
+type Mutations = ReturnType<typeof useMutations>;
+
 interface Props {
-  users: User[];
-  tasks: Task[];
-  completions: TaskCompletion[];
+  data: DashboardData;
+  mutations: Mutations;
   selectedDate: string;
   todayISO: string;
 }
 
-const keyOf = (date: string, taskId: string) => `${date}::${taskId}`;
-
-export function DailyEditor(props: Props) {
-  const router = useRouter();
-  const { selectedDate } = props;
-
-  const [users, setUsers] = useState<User[]>(props.users);
-  const [tasks, setTasks] = useState<Task[]>(props.tasks);
-  const [map, setMap] = useState<Map<string, CompletionStatus>>(() => {
-    const m = new Map<string, CompletionStatus>();
-    for (const c of props.completions) m.set(keyOf(c.date, c.task_id), c.status);
-    return m;
-  });
+export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) {
+  const [date, setDate] = useState(selectedDate);
   const [error, setError] = useState<string | null>(null);
   const [newUserName, setNewUserName] = useState("");
 
-  const statusOf = (
-    dateISO: string,
-    taskId: string,
-  ): CompletionStatus | undefined => map.get(keyOf(dateISO, taskId));
+  const index = useMemo(
+    () => buildCompletionIndex(data.completions),
+    [data.completions],
+  );
+  const { users, tasks } = data;
 
-  const scoreForUser = (userId: string, dateISO: string): Score => {
-    const active = tasksActiveOnDate(
-      tasks.filter((t) => t.user_id === userId),
-      dateISO,
+  const statusOf = (d: string, tid: string) => getStatus(index, tid, d);
+  const scoreForUser = (userId: string, d: string): Score =>
+    scoreFromStatuses(
+      tasksActiveOnDate(
+        tasks.filter((t) => t.user_id === userId),
+        d,
+      ).map((t) => statusOf(d, t.id)),
     );
-    return scoreFromStatuses(active.map((t) => statusOf(dateISO, t.id)));
-  };
-  const scoreForAll = (dateISO: string): Score => {
-    const active = tasksActiveOnDate(tasks, dateISO);
-    return scoreFromStatuses(active.map((t) => statusOf(dateISO, t.id)));
-  };
+  const scoreForAll = (d: string): Score =>
+    scoreFromStatuses(
+      tasksActiveOnDate(tasks, d).map((t) => statusOf(d, t.id)),
+    );
 
-  async function setStatus(
-    dateISO: string,
-    taskId: string,
-    status: CompletionStatus | null,
-  ) {
-    const k = keyOf(dateISO, taskId);
-    const prev = map.get(k);
-    if (status === null) {
-      if (prev === undefined) return;
-      setMap((m) => {
-        const n = new Map(m);
-        n.delete(k);
-        return n;
-      });
-      setError(null);
-      try {
-        const res = await fetch(
-          `/api/completions?task_id=${encodeURIComponent(taskId)}&date=${encodeURIComponent(dateISO)}`,
-          { method: "DELETE" },
-        );
-        if (!res.ok) throw new Error();
-      } catch {
-        setMap((m) => {
-          const n = new Map(m);
-          if (prev) n.set(k, prev);
-          return n;
-        });
-        setError("Couldn’t clear that — reverted.");
-      }
-      return;
-    }
-    if (prev === status) return;
-    setMap((m) => {
-      const n = new Map(m);
-      n.set(k, status);
-      return n;
-    });
+  function handleSetStatus(d: string, taskId: string, s: CompletionStatus | null) {
     setError(null);
-    try {
-      const res = await fetch("/api/completions", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ task_id: taskId, date: dateISO, status }),
-      });
-      if (!res.ok) throw new Error();
-    } catch {
-      setMap((m) => {
-        const n = new Map(m);
-        if (prev) n.set(k, prev);
-        else n.delete(k);
-        return n;
-      });
-      setError("Couldn’t save that change — reverted.");
-    }
+    const p = s === null ? mutations.clearCompletion(taskId, d) : mutations.setCompletion(taskId, d, s);
+    p.catch(() => setError("Couldn’t save that — reverted."));
   }
-
-  function refreshServer() {
-    router.refresh();
-  }
-
-  async function addUser(e: React.FormEvent) {
+  async function handleAddUser(e: React.FormEvent) {
     e.preventDefault();
     const name = newUserName.trim();
     if (!name) return;
     try {
-      const res = await fetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name }),
-      });
-      if (!res.ok) {
-        const d = await res.json().catch(() => ({}));
-        throw new Error(d?.error || "Couldn’t add user.");
-      }
-      const { user } = await res.json();
-      setUsers((u) => [...u, user]);
+      await mutations.addUser(name);
       setNewUserName("");
-      refreshServer();
-    } catch (e) {
-      setError(e instanceof Error ? e.message : "Couldn’t add user.");
-    }
-  }
-
-  async function addTask(userId: string, title: string): Promise<boolean> {
-    try {
-      const res = await fetch("/api/tasks", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ user_id: userId, title }),
-      });
-      if (!res.ok) throw new Error();
-      const { task } = await res.json();
-      setTasks((t) => [...t, task]);
-      refreshServer();
-      return true;
     } catch {
-      setError("Couldn’t add task.");
-      return false;
+      setError("Couldn’t add user.");
     }
   }
-
-  async function renameTask(taskId: string, title: string): Promise<boolean> {
-    try {
-      const res = await fetch(`/api/tasks/${taskId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
+  function handleAddTask(userId: string, title: string) {
+    return mutations
+      .addTask(userId, title)
+      .then(() => true)
+      .catch(() => {
+        setError("Couldn’t add task.");
+        return false;
       });
-      if (!res.ok) throw new Error();
-      const { task } = await res.json();
-      setTasks((ts) => ts.map((t) => (t.id === taskId ? task : t)));
-      refreshServer();
-      return true;
-    } catch {
-      setError("Couldn’t rename task.");
-      return false;
-    }
   }
-
-  async function deleteTask(taskId: string) {
+  function handleRename(taskId: string, title: string) {
+    return mutations
+      .renameTask(taskId, title)
+      .then(() => true)
+      .catch(() => {
+        setError("Couldn’t rename.");
+        return false;
+      });
+  }
+  function handleDeleteTask(taskId: string) {
     if (!window.confirm("Delete this task and all of its history?")) return;
-    try {
-      const res = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      setTasks((ts) => ts.filter((t) => t.id !== taskId));
-      refreshServer();
-    } catch {
-      setError("Couldn’t delete task.");
-    }
+    mutations.deleteTask(taskId).catch(() => setError("Couldn’t delete."));
   }
-
-  async function deleteUser(userId: string, name: string) {
+  function handleDeleteUser(userId: string, name: string) {
     if (
       !window.confirm(
         `Delete ${name} and ALL their tasks and history? This cannot be undone.`,
       )
     )
       return;
-    try {
-      const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
-      if (!res.ok) throw new Error();
-      setUsers((us) => us.filter((u) => u.id !== userId));
-      setTasks((ts) => ts.filter((t) => t.user_id !== userId));
-      refreshServer();
-    } catch {
-      setError("Couldn’t delete user.");
-    }
+    mutations.deleteUser(userId).catch(() => setError("Couldn’t delete user."));
   }
 
-  function goToDate(iso: string) {
-    router.push(`/?date=${encodeURIComponent(iso)}`);
-  }
   function shift(days: number) {
-    goToDate(toISODate(addDays(parseISO(selectedDate), days)));
+    setDate(toISODate(addDays(parseISO(date), days)));
   }
 
-  const overall = scoreForAll(selectedDate);
+  const overall = scoreForAll(date);
   const overallPct =
     overall.percent == null ? null : Math.round(overall.percent * 100);
   const overallColor = percentColor(overall.percent);
@@ -233,8 +128,8 @@ export function DailyEditor(props: Props) {
           </button>
           <input
             type="date"
-            value={selectedDate}
-            onChange={(e) => e.target.value && goToDate(e.target.value)}
+            value={date}
+            onChange={(e) => e.target.value && setDate(e.target.value)}
             className="h-9 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
           />
           <button
@@ -245,7 +140,7 @@ export function DailyEditor(props: Props) {
             <ChevronRight className="h-4 w-4" />
           </button>
           <button
-            onClick={() => goToDate(props.todayISO)}
+            onClick={() => setDate(todayISO)}
             className="h-9 shrink-0 rounded-lg border border-[var(--border)] px-3 text-base font-medium hover:bg-black/5"
           >
             Today
@@ -271,7 +166,7 @@ export function DailyEditor(props: Props) {
         <EmptyState
           value={newUserName}
           onChange={setNewUserName}
-          onSubmit={addUser}
+          onSubmit={handleAddUser}
         />
       ) : (
         <div className="grid gap-4">
@@ -280,20 +175,20 @@ export function DailyEditor(props: Props) {
               key={u.id}
               user={u}
               tasks={tasks.filter((t) => t.user_id === u.id)}
-              selectedDate={selectedDate}
+              selectedDate={date}
               statusOf={statusOf}
-              score={() => scoreForUser(u.id, selectedDate)}
-              onSetStatus={setStatus}
-              onRenameTask={renameTask}
-              onDeleteTask={deleteTask}
-              onAddTask={(title) => addTask(u.id, title)}
-              onDeleteUser={() => deleteUser(u.id, u.name)}
+              score={() => scoreForUser(u.id, date)}
+              onSetStatus={handleSetStatus}
+              onRenameTask={handleRename}
+              onDeleteTask={handleDeleteTask}
+              onAddTask={(title) => handleAddTask(u.id, title)}
+              onDeleteUser={() => handleDeleteUser(u.id, u.name)}
             />
           ))}
           <AddUserForm
             value={newUserName}
             onChange={setNewUserName}
-            onSubmit={addUser}
+            onSubmit={handleAddUser}
           />
         </div>
       )}

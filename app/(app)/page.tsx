@@ -1,4 +1,4 @@
-import { DailyEditor } from "@/components/daily/DailyEditor";
+import { DailyClient } from "@/components/daily/DailyClient";
 import { getDashboardData } from "@/lib/db";
 import { toISODate } from "@/lib/utils";
 
@@ -15,17 +15,13 @@ export default async function DailyPage({
   const todayISO = toISODate(new Date());
   const selectedISO = sp.date && DATE_RE.test(sp.date) ? sp.date : todayISO;
 
-  const { users, tasks, completions } = await getDashboardData(
-    selectedISO,
-    selectedISO,
-  );
+  // Seed the SWR cache with the selected day for an instant first paint; SWR
+  // then fetches the full dataset (/api/dashboard) in the background.
+  const initial = await getDashboardData(selectedISO, selectedISO);
 
   return (
-    <DailyEditor
-      key={selectedISO}
-      users={users}
-      tasks={tasks}
-      completions={completions}
+    <DailyClient
+      initial={initial}
       selectedDate={selectedISO}
       todayISO={todayISO}
     />

@@ -64,12 +64,31 @@ export async function getCompletions(
   return (data ?? []) as TaskCompletion[];
 }
 
+/** All completion rows (full history) — one query to warm the client cache. */
+export async function getAllCompletions(): Promise<TaskCompletion[]> {
+  const { data, error } = await admin()
+    .from("task_completions")
+    .select("id, task_id, date, status");
+  if (error) throw error;
+  return (data ?? []) as TaskCompletion[];
+}
+
 /** Everything a summary page needs for a [from, to] date range, in parallel. */
 export async function getDashboardData(fromISO: string, toISO: string) {
   const [users, tasks, completions] = await Promise.all([
     getUsers(),
     getTasks(),
     getCompletions(fromISO, toISO),
+  ]);
+  return { users, tasks, completions };
+}
+
+/** Full dataset (all users, tasks, and completion history) for the client cache. */
+export async function getDashboardAll() {
+  const [users, tasks, completions] = await Promise.all([
+    getUsers(),
+    getTasks(),
+    getAllCompletions(),
   ]);
   return { users, tasks, completions };
 }

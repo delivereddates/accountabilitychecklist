@@ -1,36 +1,11 @@
-import { YearHeatmap } from "@/components/summary/YearHeatmap";
-import { getDashboardData } from "@/lib/db";
-import { yearDays, type WindowMode } from "@/lib/dates";
-import { toISODate } from "@/lib/utils";
+import { Suspense } from "react";
+import { YearTab } from "@/components/summary/YearTab";
+import { Spinner } from "@/components/summary/WeekTab";
 
-export const dynamic = "force-dynamic";
-
-const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
-function isMode(s?: string): s is WindowMode {
-  return s === "rolling" || s === "calendar";
-}
-
-export default async function YearPage({
-  searchParams,
-}: {
-  searchParams: Promise<{ date?: string; mode?: string }>;
-}) {
-  const sp = await searchParams;
-  const anchor =
-    sp.date && DATE_RE.test(sp.date) ? sp.date : toISODate(new Date());
-  const mode = isMode(sp.mode) ? sp.mode : "calendar";
-
-  const days = yearDays(anchor, mode);
-  const data = await getDashboardData(days[0], days[days.length - 1]);
-
+export default function YearPage() {
   return (
-    <YearHeatmap
-      users={data.users}
-      tasks={data.tasks}
-      completions={data.completions}
-      days={days}
-      anchorISO={anchor}
-      mode={mode}
-    />
+    <Suspense fallback={<Spinner />}>
+      <YearTab />
+    </Suspense>
   );
 }
