@@ -1,19 +1,39 @@
 "use client";
 
 import { useDashboard, type DashboardData } from "./use-dashboard";
-import {
-  buildCompletionIndex,
-  getStatus,
-  tasksActiveOnDate,
-} from "./scoring";
 import type { CompletionStatus, Task, TaskCompletion } from "./types";
 
 const EMPTY: DashboardData = { users: [], tasks: [], completions: [] };
 
 /**
- * Mutations that optimistically update the shared SWR cache and write through to
- * the API. Frequent ops (toggle/clear/rename/delete) are optimistic with rollback;
- * add-user/add-task await the server first (it generates the id) then update.
+ * fetch with a few retries on transient (5xx / network) failures. Supabase
+ * occasionally returns "JWT issued at future" on clock skew — a quick retry
+ * usually clears it, so the user doesn't see a rollback/"disappear".
+ * 4xx responses are returned as-is (not retried).
+ */
+async function fetchRetry(
+  url: string,
+  init: RequestInit,
+  attempts = 4,
+): Promise<Response> {
+  let last: unknown;
+  for (let i = 0; i < attempts; i++) {
+    try {
+      const res = await fetch(url, init);
+      if (res.ok || res.status < 500) return res;
+      last = new Error(`HTTP ${res.status}`);
+    } catch (e) {
+      last = e;
+    }
+    await new Promise((r) => setTimeout(r, 250 * (i + 1)));
+  }
+  throw last instanceof Error ? last : new Error("request failed");
+}
+
+/**
+ * Mutations that optimistically update the shared SWR cache and write through
+ * to the API. Frequent ops (toggle/clear/update/delete) are optimistic with
+ * rollback; add-user/add-task await the server first (it generates the id).
  */
 export function useMutations() {
   const { mutate } = useDashboard();
@@ -22,7 +42,7 @@ export function useMutations() {
     mutate(
       async (cur) => {
         const task = cur?.tasks.find((t) => t.id === taskId);
-        const res = await fetch("/api/completions", {
+        const res = await fetchRetry("/api/completions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -37,42 +57,15 @@ export function useMutations() {
           completion: TaskCompletion;
           finalized?: TaskCompletion[];
         };
+        // Optimistic only set the check itself; the backfilled no_check rows
+        // for the user's other tasks come from the server response (finalized).
         let next = upsertCompletion(cur, body.completion);
         for (const f of body.finalized ?? []) next = upsertCompletion(next, f);
         return next;
       },
       {
-        optimisticData: (cur) => {
-          let next = upsertCompletion(cur, {
-            id: "tmp",
-            task_id: taskId,
-            date,
-            status,
-          });
-          // Checking finalizes the day: optimistically mark this user's other
-          // still-unset active tasks as no_check (matches server finalizeDay).
-          if (status === "check" && cur) {
-            const task = cur.tasks.find((t) => t.id === taskId);
-            if (task) {
-              const idx = buildCompletionIndex(cur.completions);
-              const active = tasksActiveOnDate(
-                cur.tasks.filter((t) => t.user_id === task.user_id),
-                date,
-              );
-              for (const s of active) {
-                if (getStatus(idx, s.id, date) === undefined) {
-                  next = upsertCompletion(next, {
-                    id: "tmp",
-                    task_id: s.id,
-                    date,
-                    status: "no_check",
-                  });
-                }
-              }
-            }
-          }
-          return next;
-        },
+        optimisticData: (cur) =>
+          upsertCompletion(cur, { id: "tmp", task_id: taskId, date, status }),
         rollbackOnError: true,
         revalidate: false,
       },
@@ -81,7 +74,7 @@ export function useMutations() {
   const clearCompletion = (taskId: string, date: string) =>
     mutate(
       async (cur) => {
-        const res = await fetch(
+        const res = await fetchRetry(
           `/api/completions?task_id=${encodeURIComponent(taskId)}&date=${encodeURIComponent(date)}`,
           { method: "DELETE" },
         );
@@ -96,7 +89,7 @@ export function useMutations() {
     );
 
   const addUser = async (name: string) => {
-    const res = await fetch("/api/users", {
+    const res = await fetchRetry("/api/users", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ name }),
@@ -110,7 +103,7 @@ export function useMutations() {
   };
 
   const addTask = async (userId: string, title: string, notes = "") => {
-    const res = await fetch("/api/tasks", {
+    const res = await fetchRetry("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ user_id: userId, title, notes }),
@@ -127,7 +120,7 @@ export function useMutations() {
   const updateTask = (taskId: string, patch: { title?: string; notes?: string }) =>
     mutate(
       async (cur) => {
-        const res = await fetch(`/api/tasks/${taskId}`, {
+        const res = await fetchRetry(`/api/tasks/${taskId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(patch),
@@ -154,7 +147,7 @@ export function useMutations() {
   const deleteTask = (taskId: string) =>
     mutate(
       async (cur) => {
-        const res = await fetch(`/api/tasks/${taskId}`, { method: "DELETE" });
+        const res = await fetchRetry(`/api/tasks/${taskId}`, { method: "DELETE" });
         if (!res.ok) throw new Error("delete task failed");
         const base = cur ?? EMPTY;
         return {
@@ -180,7 +173,7 @@ export function useMutations() {
   const deleteUser = (userId: string) =>
     mutate(
       async (cur) => {
-        const res = await fetch(`/api/users/${userId}`, { method: "DELETE" });
+        const res = await fetchRetry(`/api/users/${userId}`, { method: "DELETE" });
         if (!res.ok) throw new Error("delete user failed");
         return pruneUser(cur, userId);
       },
