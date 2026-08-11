@@ -38,55 +38,53 @@ async function fetchRetry(
 export function useMutations() {
   const { mutate } = useDashboard();
 
-  const setCompletion = (taskId: string, date: string, status: CompletionStatus) =>
+  const setCompletion = (taskId: string, date: string, status: CompletionStatus) => {
+    // Optimistic as a plain composing updater (NOT optimisticData/rollback):
+    // each toggle reads the latest cache, so rapid successive clicks never
+    // clobber each other via a stale rollback snapshot.
     mutate(
-      async (cur) => {
-        const task = cur?.tasks.find((t) => t.id === taskId);
+      (cur) => upsertCompletion(cur, { id: "tmp", task_id: taskId, date, status }),
+      { revalidate: false },
+    );
+    // Persist + reconcile in the background.
+    void (async () => {
+      try {
         const res = await fetchRetry("/api/completions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            task_id: taskId,
-            date,
-            status,
-            user_id: task?.user_id,
-          }),
+          body: JSON.stringify({ task_id: taskId, date, status }),
         });
         if (!res.ok) throw new Error("save failed");
         const body = (await res.json()) as {
           completion: TaskCompletion;
           finalized?: TaskCompletion[];
         };
-        // Optimistic only set the check itself; the backfilled no_check rows
-        // for the user's other tasks come from the server response (finalized).
-        let next = upsertCompletion(cur, body.completion);
-        for (const f of body.finalized ?? []) next = upsertCompletion(next, f);
-        return next;
-      },
-      {
-        optimisticData: (cur) =>
-          upsertCompletion(cur, { id: "tmp", task_id: taskId, date, status }),
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    );
+        mutate((cur) => {
+          let next = upsertCompletion(cur, body.completion);
+          for (const f of body.finalized ?? []) next = upsertCompletion(next, f);
+          return next;
+        }, { revalidate: false });
+      } catch {
+        mutate(); // hard failure: revalidate from the server
+      }
+    })();
+  };
 
-  const clearCompletion = (taskId: string, date: string) =>
-    mutate(
-      async (cur) => {
+  const clearCompletion = (taskId: string, date: string) => {
+    mutate((cur) => removeCompletion(cur, taskId, date), { revalidate: false });
+    void (async () => {
+      try {
         const res = await fetchRetry(
           `/api/completions?task_id=${encodeURIComponent(taskId)}&date=${encodeURIComponent(date)}`,
           { method: "DELETE" },
         );
         if (!res.ok) throw new Error("clear failed");
-        return removeCompletion(cur, taskId, date);
-      },
-      {
-        optimisticData: (cur) => removeCompletion(cur, taskId, date),
-        rollbackOnError: true,
-        revalidate: false,
-      },
-    );
+        mutate((cur) => removeCompletion(cur, taskId, date), { revalidate: false });
+      } catch {
+        mutate();
+      }
+    })();
+  };
 
   const addUser = async (name: string) => {
     const res = await fetchRetry("/api/users", {

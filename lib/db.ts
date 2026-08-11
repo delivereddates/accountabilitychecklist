@@ -183,6 +183,17 @@ export async function deleteTask(id: string): Promise<void> {
   if (error) throw error;
 }
 
+/** Look up the user that owns a task (used by the completions route for finalize). */
+export async function getTaskUserId(taskId: string): Promise<string | null> {
+  const { data, error } = await admin()
+    .from("tasks")
+    .select("user_id")
+    .eq("id", taskId)
+    .single();
+  if (error) return null;
+  return (data?.user_id as string) ?? null;
+}
+
 /** Delete a user; cascades to their tasks and all completion history (FK cascade). */
 export async function deleteUser(id: string): Promise<void> {
   const { error } = await admin().from("users").delete().eq("id", id);

@@ -51,11 +51,8 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
 
   function handleSetStatus(d: string, taskId: string, s: CompletionStatus | null) {
     setError(null);
-    const p =
-      s === null
-        ? mutations.clearCompletion(taskId, d)
-        : mutations.setCompletion(taskId, d, s);
-    p.catch(() => setError("Couldn’t save that — reverted."));
+    if (s === null) mutations.clearCompletion(taskId, d);
+    else mutations.setCompletion(taskId, d, s);
   }
   async function handleAddUser(e: React.FormEvent) {
     e.preventDefault();
