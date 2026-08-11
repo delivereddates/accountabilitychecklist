@@ -1,12 +1,12 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { clearCompletion, finalizeDay, getTaskUserId, setCompletion } from "@/lib/db";
+import { clearCompletion, setCompletion } from "@/lib/db";
 import { jsonError } from "@/lib/api-helpers";
-import type { CompletionStatus, TaskCompletion } from "@/lib/types";
+import type { CompletionStatus } from "@/lib/types";
 
 const VALID_STATUSES: CompletionStatus[] = ["check", "no_check", "exempt"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
-/** Upsert a task's status for a date. Called on every 3-way toggle. */
+/** Upsert a task's status for a date. Called on every 3-way toggle (debounced). */
 export async function POST(req: NextRequest) {
   const { task_id, date, status } = await req.json().catch(() => ({}));
 
@@ -30,15 +30,10 @@ export async function POST(req: NextRequest) {
   }
 
   try {
+    // The client is the source of truth; it computes any "backfill" itself and
+    // sends each row individually. The server just stores what it's told.
     const completion = await setCompletion(task_id, date, status);
-    // Checking a task finalizes the day: mark the owner's other active tasks
-    // (that have no row yet) as 'no_check'. Server resolves the user itself.
-    let finalized: TaskCompletion[] = [];
-    if (status === "check") {
-      const userId = await getTaskUserId(task_id);
-      if (userId) finalized = await finalizeDay(userId, date);
-    }
-    return NextResponse.json({ completion, finalized });
+    return NextResponse.json({ completion });
   } catch (e) {
     return jsonError(e);
   }

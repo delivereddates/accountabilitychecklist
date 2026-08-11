@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { useSearchParams } from "next/navigation";
 import { DailyEditor } from "./DailyEditor";
 import { useDashboard } from "@/lib/use-dashboard";
-import { useMutations } from "@/lib/swr-mutations";
+import { useMutations, resyncWhenIdle } from "@/lib/swr-mutations";
 import { toISODate } from "@/lib/utils";
 
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
@@ -13,7 +13,8 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * Daily is fully client-side: today/date are computed in the browser (native
  * timezone), and it reads from the shared SWR cache (seeded by the layout) — so
  * there's no per-Daily server fetch, no spinner, and no flash. Returning to
- * Daily triggers a background revalidation (the only place the app resyncs).
+ * Daily asks the coordinator to re-fetch once it's idle (never clobbering
+ * in-flight writes).
  */
 export function DailyClient() {
   const params = useSearchParams();
@@ -22,12 +23,12 @@ export function DailyClient() {
   const selectedDate =
     dateParam && DATE_RE.test(dateParam) ? dateParam : todayISO;
 
-  const { data, mutate } = useDashboard();
+  const { data } = useDashboard();
   const mutations = useMutations();
 
   useEffect(() => {
-    mutate();
-  }, [mutate]);
+    resyncWhenIdle();
+  }, []);
 
   if (!data) {
     return (

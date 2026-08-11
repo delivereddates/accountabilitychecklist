@@ -138,60 +138,9 @@ export async function updateTask(
   return data as Task;
 }
 
-/**
- * When a user checks any task for a day, mark their other active tasks for that
- * day as 'no_check' so the day's score reflects reality (missing rows otherwise
- * read as neutral "no data"). Tasks that already have a row (incl. exempt) and
- * tasks not yet created are left alone. Returns the rows inserted.
- */
-export async function finalizeDay(
-  userId: string,
-  dateISO: string,
-): Promise<TaskCompletion[]> {
-  const end = `${dateISO}T23:59:59Z`;
-  const { data: tasks, error: e1 } = await admin()
-    .from("tasks")
-    .select("id")
-    .eq("user_id", userId)
-    .lte("created_at", end);
-  if (e1) throw e1;
-  const taskIds = (tasks ?? []).map((t) => t.id as string);
-  if (taskIds.length === 0) return [];
-
-  const { data: existing, error: e2 } = await admin()
-    .from("task_completions")
-    .select("task_id")
-    .in("task_id", taskIds)
-    .eq("date", dateISO);
-  if (e2) throw e2;
-  const have = new Set((existing ?? []).map((c) => c.task_id as string));
-  const missing = taskIds.filter((id) => !have.has(id));
-  if (missing.length === 0) return [];
-
-  const { data: inserted, error: e3 } = await admin()
-    .from("task_completions")
-    .insert(
-      missing.map((task_id) => ({ task_id, date: dateISO, status: "no_check" })),
-    )
-    .select("id, task_id, date, status");
-  if (e3) throw e3;
-  return (inserted ?? []) as TaskCompletion[];
-}
-
 export async function deleteTask(id: string): Promise<void> {
   const { error } = await admin().from("tasks").delete().eq("id", id);
   if (error) throw error;
-}
-
-/** Look up the user that owns a task (used by the completions route for finalize). */
-export async function getTaskUserId(taskId: string): Promise<string | null> {
-  const { data, error } = await admin()
-    .from("tasks")
-    .select("user_id")
-    .eq("id", taskId)
-    .single();
-  if (error) return null;
-  return (data?.user_id as string) ?? null;
 }
 
 /** Delete a user; cascades to their tasks and all completion history (FK cascade). */
