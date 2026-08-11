@@ -45,7 +45,7 @@ export async function getUsers(): Promise<User[]> {
 export async function getTasks(): Promise<Task[]> {
   const { data, error } = await admin()
     .from("tasks")
-    .select("id, user_id, title, created_at")
+    .select("id, user_id, title, notes, created_at")
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as Task[];
@@ -107,11 +107,15 @@ export async function createUser(name: string): Promise<User> {
   return data as User;
 }
 
-export async function createTask(userId: string, title: string): Promise<Task> {
+export async function createTask(
+  userId: string,
+  title: string,
+  notes = "",
+): Promise<Task> {
   const { data, error } = await admin()
     .from("tasks")
-    .insert({ user_id: userId, title: title.trim() })
-    .select("id, user_id, title, created_at")
+    .insert({ user_id: userId, title: title.trim(), notes })
+    .select("id, user_id, title, notes, created_at")
     .single();
   if (error) throw error;
   return data as Task;
@@ -119,16 +123,59 @@ export async function createTask(userId: string, title: string): Promise<Task> {
 
 export async function updateTask(
   id: string,
-  title: string,
+  patch: { title?: string; notes?: string },
 ): Promise<Task> {
+  const update: Record<string, string> = {};
+  if (typeof patch.title === "string") update.title = patch.title.trim();
+  if (typeof patch.notes === "string") update.notes = patch.notes;
   const { data, error } = await admin()
     .from("tasks")
-    .update({ title: title.trim() })
+    .update(update)
     .eq("id", id)
-    .select("id, user_id, title, created_at")
+    .select("id, user_id, title, notes, created_at")
     .single();
   if (error) throw error;
   return data as Task;
+}
+
+/**
+ * When a user checks any task for a day, mark their other active tasks for that
+ * day as 'no_check' so the day's score reflects reality (missing rows otherwise
+ * read as neutral "no data"). Tasks that already have a row (incl. exempt) and
+ * tasks not yet created are left alone. Returns the rows inserted.
+ */
+export async function finalizeDay(
+  userId: string,
+  dateISO: string,
+): Promise<TaskCompletion[]> {
+  const end = `${dateISO}T23:59:59Z`;
+  const { data: tasks, error: e1 } = await admin()
+    .from("tasks")
+    .select("id")
+    .eq("user_id", userId)
+    .lte("created_at", end);
+  if (e1) throw e1;
+  const taskIds = (tasks ?? []).map((t) => t.id as string);
+  if (taskIds.length === 0) return [];
+
+  const { data: existing, error: e2 } = await admin()
+    .from("task_completions")
+    .select("task_id")
+    .in("task_id", taskIds)
+    .eq("date", dateISO);
+  if (e2) throw e2;
+  const have = new Set((existing ?? []).map((c) => c.task_id as string));
+  const missing = taskIds.filter((id) => !have.has(id));
+  if (missing.length === 0) return [];
+
+  const { data: inserted, error: e3 } = await admin()
+    .from("task_completions")
+    .insert(
+      missing.map((task_id) => ({ task_id, date: dateISO, status: "no_check" })),
+    )
+    .select("id, task_id, date, status");
+  if (e3) throw e3;
+  return (inserted ?? []) as TaskCompletion[];
 }
 
 export async function deleteTask(id: string): Promise<void> {

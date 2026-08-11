@@ -85,12 +85,12 @@ export function WeekView(props: Props) {
 
       <StatusLegend />
 
-      {/* Matrix — border-separate makes sticky columns reliable. */}
-      <div className="overflow-x-auto rounded-xl border border-[var(--border)] bg-[var(--card)]">
-        <table className="w-full border-separate border-spacing-0 text-sm">
+      {/* Matrix — table-fixed so all 7 days fit without horizontal scroll. */}
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--card)]">
+        <table className="w-full table-fixed border-separate border-spacing-0 text-xs">
           <thead>
             <tr className="[&>th]:border-b [&>th]:border-[var(--border)]">
-              <th className="sticky left-0 z-10 bg-[var(--card)] px-3 py-2 text-left text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+              <th className="sticky left-0 z-10 w-28 bg-[var(--card)] px-2 py-2 text-left text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)] sm:w-48 sm:text-xs">
                 Task
               </th>
               {days.map((d) => {
@@ -103,21 +103,23 @@ export function WeekView(props: Props) {
                     ? null
                     : Math.round(overall.percent * 100);
                 return (
-                  <th key={d} className="px-2 py-2 text-center align-bottom">
-                    <div className="flex flex-col items-center gap-0.5">
+                  <th key={d} className="px-0.5 py-1.5 text-center align-bottom">
+                    <div className="flex flex-col items-center leading-tight">
                       <span
                         className={cn(
-                          today && "font-bold text-[var(--color-check)]",
-                          !today && "font-medium",
+                          "text-[10px]",
+                          today
+                            ? "font-bold text-[var(--color-check)]"
+                            : "text-[var(--muted)]",
                         )}
                       >
                         {format(dt, "EEEEE")}
                       </span>
-                      <span className="text-xs text-[var(--muted)]">
+                      <span className="text-[10px] text-[var(--muted)]">
                         {format(dt, "d")}
                       </span>
-                      <span className="text-[10px] text-[var(--muted)]">
-                        {future || pct == null ? "—" : `${pct}%`}
+                      <span className="text-[9px] text-[var(--muted)]">
+                        {future || pct == null ? "–" : `${pct}%`}
                       </span>
                     </div>
                   </th>
@@ -141,7 +143,7 @@ export function WeekView(props: Props) {
               return (
                 <Fragment key={u.id}>
                   <tr className="bg-[#f3f4f6] [&>td]:border-t [&>td]:border-[var(--border)]">
-                    <td className="sticky left-0 z-10 bg-[#f3f4f6] px-3 py-1.5 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                    <td className="sticky left-0 z-10 w-28 bg-[#f3f4f6] px-2 py-1.5 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)] sm:w-48 sm:text-xs">
                       {u.name}
                     </td>
                     {days.map((d) => (
@@ -152,7 +154,7 @@ export function WeekView(props: Props) {
                     <tr className="[&>td]:border-t [&>td]:border-[var(--border)]">
                       <td
                         colSpan={days.length + 1}
-                        className="px-3 py-2 text-xs text-[var(--muted)]"
+                        className="px-3 py-2 text-[10px] text-[var(--muted)]"
                       >
                         No tasks
                       </td>
@@ -163,8 +165,10 @@ export function WeekView(props: Props) {
                         key={t.id}
                         className="[&>td]:border-t [&>td]:border-[var(--border)]"
                       >
-                        <td className="sticky left-0 z-10 max-w-[14rem] truncate bg-[var(--card)] px-3 py-2 font-medium">
-                          {t.title}
+                        <td className="sticky left-0 z-10 w-28 bg-[var(--card)] px-2 py-1.5 align-top text-[11px] leading-tight sm:w-48 sm:text-xs">
+                          <span className="line-clamp-2 break-words">
+                            {t.title}
+                          </span>
                         </td>
                         {days.map((d) => {
                           const future = d > todayISO;
@@ -172,7 +176,7 @@ export function WeekView(props: Props) {
                           return (
                             <td
                               key={d}
-                              className="px-2 py-2 text-center align-middle"
+                              className="px-0.5 py-1.5 text-center align-middle"
                             >
                               {active ? (
                                 <StatusGlyph

@@ -26,7 +26,8 @@ export default function Icon() {
           strokeLinecap="round"
           strokeLinejoin="round"
         >
-          <path d="M20 6 9 17l-5-5" />
+          <path d="M3 19 12 4 21 19" />
+          <path d="M8 14h8" />
         </svg>
       </div>
     ),

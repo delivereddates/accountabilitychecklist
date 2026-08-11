@@ -18,6 +18,7 @@ import { useMutations } from "@/lib/swr-mutations";
 import { ThreeWayToggle } from "./ThreeWayToggle";
 
 type Mutations = ReturnType<typeof useMutations>;
+type TaskPatch = { title?: string; notes?: string };
 
 interface Props {
   data: DashboardData;
@@ -46,13 +47,14 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
       ).map((t) => statusOf(d, t.id)),
     );
   const scoreForAll = (d: string): Score =>
-    scoreFromStatuses(
-      tasksActiveOnDate(tasks, d).map((t) => statusOf(d, t.id)),
-    );
+    scoreFromStatuses(tasksActiveOnDate(tasks, d).map((t) => statusOf(d, t.id)));
 
   function handleSetStatus(d: string, taskId: string, s: CompletionStatus | null) {
     setError(null);
-    const p = s === null ? mutations.clearCompletion(taskId, d) : mutations.setCompletion(taskId, d, s);
+    const p =
+      s === null
+        ? mutations.clearCompletion(taskId, d)
+        : mutations.setCompletion(taskId, d, s);
     p.catch(() => setError("Couldn’t save that — reverted."));
   }
   async function handleAddUser(e: React.FormEvent) {
@@ -75,12 +77,12 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
         return false;
       });
   }
-  function handleRename(taskId: string, title: string) {
+  function handleUpdateTask(taskId: string, patch: TaskPatch) {
     return mutations
-      .renameTask(taskId, title)
+      .updateTask(taskId, patch)
       .then(() => true)
       .catch(() => {
-        setError("Couldn’t rename.");
+        setError("Couldn’t save task.");
         return false;
       });
   }
@@ -179,7 +181,7 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
               statusOf={statusOf}
               score={() => scoreForUser(u.id, date)}
               onSetStatus={handleSetStatus}
-              onRenameTask={handleRename}
+              onUpdateTask={handleUpdateTask}
               onDeleteTask={handleDeleteTask}
               onAddTask={(title) => handleAddTask(u.id, title)}
               onDeleteUser={() => handleDeleteUser(u.id, u.name)}
@@ -214,7 +216,7 @@ function UserCard({
   statusOf,
   score,
   onSetStatus,
-  onRenameTask,
+  onUpdateTask,
   onDeleteTask,
   onAddTask,
   onDeleteUser,
@@ -229,7 +231,7 @@ function UserCard({
     taskId: string,
     status: CompletionStatus | null,
   ) => void;
-  onRenameTask: (taskId: string, title: string) => Promise<boolean>;
+  onUpdateTask: (taskId: string, patch: TaskPatch) => Promise<boolean>;
   onDeleteTask: (taskId: string) => void;
   onAddTask: (title: string) => Promise<boolean>;
   onDeleteUser: () => void;
@@ -267,7 +269,7 @@ function UserCard({
               selectedDate={selectedDate}
               status={statusOf(selectedDate, task.id)}
               onSetStatus={onSetStatus}
-              onRename={onRenameTask}
+              onUpdate={onUpdateTask}
               onDelete={onDeleteTask}
             />
           ))}
@@ -308,7 +310,7 @@ function TaskRow({
   selectedDate,
   status,
   onSetStatus,
-  onRename,
+  onUpdate,
   onDelete,
 }: {
   task: Task;
@@ -319,36 +321,81 @@ function TaskRow({
     taskId: string,
     status: CompletionStatus | null,
   ) => void;
-  onRename: (taskId: string, title: string) => Promise<boolean>;
+  onUpdate: (taskId: string, patch: TaskPatch) => Promise<boolean>;
   onDelete: (taskId: string) => void;
 }) {
   const active = tasksActiveOnDate([task], selectedDate).length > 0;
+  const [showNotes, setShowNotes] = useState(false);
+  const hasNotes = !!task.notes?.trim();
 
   return (
-    <li className="group flex items-center gap-2 border-t border-[var(--border)] py-2.5 first:border-t-0">
-      <div className="flex min-w-0 flex-1 items-center gap-1">
-        <TaskTitle title={task.title} onRename={(t) => onRename(task.id, t)} />
-        <button
-          onClick={() => onDelete(task.id)}
-          className="shrink-0 rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--color-nocheck)] hover:opacity-100"
-          aria-label="Delete task"
-          title="Delete task"
-        >
-          <Trash2 className="h-3.5 w-3.5" />
-        </button>
+    <li className="flex flex-col gap-1 border-t border-[var(--border)] py-2.5 first:border-t-0">
+      <div className="flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 items-center gap-1">
+          <TaskTitle title={task.title} onRename={(t) => onUpdate(task.id, { title: t })} />
+          <button
+            onClick={() => setShowNotes((v) => !v)}
+            className={
+              "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium transition " +
+              (hasNotes
+                ? "text-[var(--color-exempt)]"
+                : "text-[var(--muted)] opacity-60 hover:opacity-100")
+            }
+            title="Notes"
+          >
+            Notes{hasNotes ? " •" : ""}
+          </button>
+          <button
+            onClick={() => onDelete(task.id)}
+            className="shrink-0 rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--color-nocheck)] hover:opacity-100"
+            aria-label="Delete task"
+            title="Delete task"
+          >
+            <Trash2 className="h-3.5 w-3.5" />
+          </button>
+        </div>
+        {active ? (
+          <ThreeWayToggle
+            value={status ?? null}
+            onChange={(s) => onSetStatus(selectedDate, task.id, s)}
+            size="sm"
+          />
+        ) : (
+          <span className="shrink-0 pr-2 text-xs text-[var(--muted)] opacity-40">
+            —
+          </span>
+        )}
       </div>
-      {active ? (
-        <ThreeWayToggle
-          value={status ?? null}
-          onChange={(s) => onSetStatus(selectedDate, task.id, s)}
-          size="sm"
+      {showNotes && (
+        <TaskNotes
+          key={`${task.id}-${task.notes ?? ""}`}
+          notes={task.notes ?? ""}
+          onSave={(v) => onUpdate(task.id, { notes: v })}
         />
-      ) : (
-        <span className="shrink-0 pr-2 text-xs text-[var(--muted)] opacity-40">
-          —
-        </span>
       )}
     </li>
+  );
+}
+
+function TaskNotes({
+  notes,
+  onSave,
+}: {
+  notes: string;
+  onSave: (v: string) => Promise<boolean>;
+}) {
+  const [v, setV] = useState(notes);
+  return (
+    <textarea
+      value={v}
+      onChange={(e) => setV(e.target.value)}
+      onBlur={() => {
+        if (v !== notes) onSave(v);
+      }}
+      placeholder="Notes…"
+      rows={2}
+      className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-sm outline-none focus:border-[var(--color-check)]"
+    />
   );
 }
 
@@ -369,8 +416,8 @@ function TaskTitle({
         value={draft}
         onChange={(e) => setDraft(e.target.value)}
         onBlur={async () => {
-          const v = draft.trim();
-          if (v && v !== title && (await onRename(v))) {
+          const val = draft.trim();
+          if (val && val !== title && (await onRename(val))) {
             setEditing(false);
           } else {
             setDraft(title);
@@ -413,10 +460,10 @@ function AddTaskForm({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) 
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    const v = title.trim();
-    if (!v) return;
+    const val = title.trim();
+    if (!val) return;
     setBusy(true);
-    const ok = await onAdd(v);
+    const ok = await onAdd(val);
     setBusy(false);
     if (ok) setTitle("");
   }

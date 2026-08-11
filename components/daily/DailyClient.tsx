@@ -1,36 +1,41 @@
 "use client";
 
 import { useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { DailyEditor } from "./DailyEditor";
-import {
-  useDashboard,
-  type DashboardData,
-} from "@/lib/use-dashboard";
+import { useDashboard } from "@/lib/use-dashboard";
 import { useMutations } from "@/lib/swr-mutations";
+import { toISODate } from "@/lib/utils";
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
- * Wraps the Daily editor with the shared SWR cache. `initial` (today's data,
- * fetched server-side) seeds the cache via fallbackData for an instant first
- * paint; SWR then upgrades to the full dataset. On every (re)open of Daily we
- * revalidate — that's the single place the app resyncs with Supabase.
+ * Daily is fully client-side: today/date are computed in the browser (native
+ * timezone), and it reads from the shared SWR cache (seeded by the layout) — so
+ * there's no per-Daily server fetch, no spinner, and no flash. Returning to
+ * Daily triggers a background revalidation (the only place the app resyncs).
  */
-export function DailyClient({
-  initial,
-  selectedDate,
-  todayISO,
-}: {
-  initial: DashboardData;
-  selectedDate: string;
-  todayISO: string;
-}) {
-  const { data, mutate } = useDashboard({ fallbackData: initial });
+export function DailyClient() {
+  const params = useSearchParams();
+  const todayISO = toISODate(new Date());
+  const dateParam = params.get("date");
+  const selectedDate =
+    dateParam && DATE_RE.test(dateParam) ? dateParam : todayISO;
+
+  const { data, mutate } = useDashboard();
   const mutations = useMutations();
 
   useEffect(() => {
     mutate();
   }, [mutate]);
 
-  if (!data) return null;
+  if (!data) {
+    return (
+      <div className="flex min-h-[40vh] items-center justify-center text-sm text-[var(--muted)]">
+        Loading…
+      </div>
+    );
+  }
 
   return (
     <DailyEditor

@@ -2,8 +2,9 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { ListChecks, LogOut } from "lucide-react";
+import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { Logo } from "@/components/Logo";
 
 const LINKS = [
   { href: "/", label: "Daily" },
@@ -29,7 +30,7 @@ export function Navbar() {
           href="/"
           className="mr-2 flex items-center gap-2 font-semibold tracking-tight"
         >
-          <ListChecks className="h-5 w-5 text-[var(--color-check)]" />
+          <Logo className="h-6 w-6" />
           <span className="hidden sm:inline">Accountability</span>
         </Link>
 

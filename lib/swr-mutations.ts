@@ -1,6 +1,11 @@
 "use client";
 
 import { useDashboard, type DashboardData } from "./use-dashboard";
+import {
+  buildCompletionIndex,
+  getStatus,
+  tasksActiveOnDate,
+} from "./scoring";
 import type { CompletionStatus, Task, TaskCompletion } from "./types";
 
 const EMPTY: DashboardData = { users: [], tasks: [], completions: [] };
@@ -16,18 +21,58 @@ export function useMutations() {
   const setCompletion = (taskId: string, date: string, status: CompletionStatus) =>
     mutate(
       async (cur) => {
+        const task = cur?.tasks.find((t) => t.id === taskId);
         const res = await fetch("/api/completions", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ task_id: taskId, date, status }),
+          body: JSON.stringify({
+            task_id: taskId,
+            date,
+            status,
+            user_id: task?.user_id,
+          }),
         });
         if (!res.ok) throw new Error("save failed");
-        const { completion } = (await res.json()) as { completion: TaskCompletion };
-        return upsertCompletion(cur, completion);
+        const body = (await res.json()) as {
+          completion: TaskCompletion;
+          finalized?: TaskCompletion[];
+        };
+        let next = upsertCompletion(cur, body.completion);
+        for (const f of body.finalized ?? []) next = upsertCompletion(next, f);
+        return next;
       },
       {
-        optimisticData: (cur) =>
-          upsertCompletion(cur, { id: "tmp", task_id: taskId, date, status }),
+        optimisticData: (cur) => {
+          let next = upsertCompletion(cur, {
+            id: "tmp",
+            task_id: taskId,
+            date,
+            status,
+          });
+          // Checking finalizes the day: optimistically mark this user's other
+          // still-unset active tasks as no_check (matches server finalizeDay).
+          if (status === "check" && cur) {
+            const task = cur.tasks.find((t) => t.id === taskId);
+            if (task) {
+              const idx = buildCompletionIndex(cur.completions);
+              const active = tasksActiveOnDate(
+                cur.tasks.filter((t) => t.user_id === task.user_id),
+                date,
+              );
+              for (const s of active) {
+                if (getStatus(idx, s.id, date) === undefined) {
+                  next = upsertCompletion(next, {
+                    id: "tmp",
+                    task_id: s.id,
+                    date,
+                    status: "no_check",
+                  });
+                }
+              }
+            }
+          }
+          return next;
+        },
         rollbackOnError: true,
         revalidate: false,
       },
@@ -64,11 +109,11 @@ export function useMutations() {
     );
   };
 
-  const addTask = async (userId: string, title: string) => {
+  const addTask = async (userId: string, title: string, notes = "") => {
     const res = await fetch("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, title }),
+      body: JSON.stringify({ user_id: userId, title, notes }),
     });
     if (!res.ok) throw new Error("add task failed");
     const { task } = (await res.json()) as { task: Task };
@@ -78,15 +123,16 @@ export function useMutations() {
     );
   };
 
-  const renameTask = (taskId: string, title: string) =>
+  /** Update title and/or notes for a task. */
+  const updateTask = (taskId: string, patch: { title?: string; notes?: string }) =>
     mutate(
       async (cur) => {
         const res = await fetch(`/api/tasks/${taskId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ title }),
+          body: JSON.stringify(patch),
         });
-        if (!res.ok) throw new Error("rename failed");
+        if (!res.ok) throw new Error("update failed");
         const { task } = (await res.json()) as { task: Task };
         return {
           ...(cur ?? EMPTY),
@@ -97,7 +143,7 @@ export function useMutations() {
         optimisticData: (cur) => ({
           ...(cur ?? EMPTY),
           tasks: (cur ?? EMPTY).tasks.map((t) =>
-            t.id === taskId ? { ...t, title } : t,
+            t.id === taskId ? { ...t, ...patch } : t,
           ),
         }),
         rollbackOnError: true,
@@ -150,7 +196,7 @@ export function useMutations() {
     clearCompletion,
     addUser,
     addTask,
-    renameTask,
+    updateTask,
     deleteTask,
     deleteUser,
   };

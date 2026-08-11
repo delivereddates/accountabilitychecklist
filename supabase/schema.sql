@@ -33,15 +33,20 @@ create table if not exists public.tasks (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid not null references public.users(id) on delete cascade,
   title      text not null,
+  notes      text not null default '',
   created_at timestamptz not null default now()
 );
+
+-- Add notes column to pre-existing tables (idempotent). Safe to re-run.
+alter table public.tasks add column if not exists notes text not null default '';
 
 create index if not exists tasks_user_id_idx on public.tasks(user_id);
 
 -- ---------------------------------------------------------------------------
 -- task_completions: the status of one task on one calendar day.
 -- UNIQUE(task_id, date) guarantees at most one status per task per day.
--- A missing row is treated as 'no_check' by the application.
+-- A missing row is treated as "no data" by the application (neutral, excluded
+-- from the score), distinct from an explicit 'no_check'.
 -- ---------------------------------------------------------------------------
 create table if not exists public.task_completions (
   id      uuid primary key default gen_random_uuid(),

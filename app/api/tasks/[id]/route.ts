@@ -7,15 +7,18 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const { id } = await params;
-  const { title } = await req.json().catch(() => ({}));
-  if (typeof title !== "string" || !title.trim()) {
+  const { title, notes } = await req.json().catch(() => ({}));
+  const patch: { title?: string; notes?: string } = {};
+  if (typeof title === "string" && title.trim()) patch.title = title;
+  if (typeof notes === "string") patch.notes = notes;
+  if (Object.keys(patch).length === 0) {
     return NextResponse.json(
-      { error: "A non-empty title is required." },
+      { error: "Provide title and/or notes to update." },
       { status: 400 },
     );
   }
   try {
-    const task = await updateTask(id, title);
+    const task = await updateTask(id, patch);
     return NextResponse.json({ task });
   } catch (e) {
     return jsonError(e);

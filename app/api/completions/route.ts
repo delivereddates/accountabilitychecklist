@@ -1,14 +1,14 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { clearCompletion, setCompletion } from "@/lib/db";
+import { clearCompletion, finalizeDay, setCompletion } from "@/lib/db";
 import { jsonError } from "@/lib/api-helpers";
-import type { CompletionStatus } from "@/lib/types";
+import type { CompletionStatus, TaskCompletion } from "@/lib/types";
 
 const VALID_STATUSES: CompletionStatus[] = ["check", "no_check", "exempt"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /** Upsert a task's status for a date. Called on every 3-way toggle. */
 export async function POST(req: NextRequest) {
-  const { task_id, date, status } = await req.json().catch(() => ({}));
+  const { task_id, date, status, user_id } = await req.json().catch(() => ({}));
 
   if (typeof task_id !== "string" || typeof date !== "string") {
     return NextResponse.json(
@@ -31,7 +31,13 @@ export async function POST(req: NextRequest) {
 
   try {
     const completion = await setCompletion(task_id, date, status);
-    return NextResponse.json({ completion });
+    // Checking a task finalizes the day: mark the user's other active tasks
+    // (that have no row yet) as 'no_check'. Client passes user_id; optional.
+    let finalized: TaskCompletion[] = [];
+    if (status === "check" && typeof user_id === "string") {
+      finalized = await finalizeDay(user_id, date);
+    }
+    return NextResponse.json({ completion, finalized });
   } catch (e) {
     return jsonError(e);
   }

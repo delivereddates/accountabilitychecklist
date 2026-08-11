@@ -3,7 +3,7 @@ import { createTask } from "@/lib/db";
 import { jsonError } from "@/lib/api-helpers";
 
 export async function POST(req: NextRequest) {
-  const { user_id, title } = await req.json().catch(() => ({}));
+  const { user_id, title, notes } = await req.json().catch(() => ({}));
   if (
     typeof user_id !== "string" ||
     typeof title !== "string" ||
@@ -15,7 +15,11 @@ export async function POST(req: NextRequest) {
     );
   }
   try {
-    const task = await createTask(user_id, title);
+    const task = await createTask(
+      user_id,
+      title,
+      typeof notes === "string" ? notes : "",
+    );
     return NextResponse.json({ task }, { status: 201 });
   } catch (e) {
     return jsonError(e);
