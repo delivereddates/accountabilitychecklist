@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, addMonths, format, isToday, parseISO } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toISODate } from "@/lib/utils";
 import type { WindowMode } from "@/lib/dates";
 import {
@@ -13,7 +12,8 @@ import {
 } from "@/lib/scoring";
 import { percentColor, percentTint } from "@/lib/colors";
 import type { Task, TaskCompletion, User } from "@/lib/types";
-import { ModeToggle } from "./ModeToggle";
+import { DateStepper } from "./DateStepper";
+import { RollingToggle } from "./RollingToggle";
 
 interface Props {
   users: User[];
@@ -56,37 +56,16 @@ export function MonthView(props: Props) {
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <h1 className="shrink-0 text-lg font-semibold tracking-tight">Month</h1>
         <div className="ml-auto flex items-center gap-1.5">
-          <ModeToggle
-            mode={mode}
-            onChange={(m) => go(anchorISO, m)}
-            rollingLabel="Last 30"
-            calendarLabel="Month"
+          <RollingToggle
+            on={mode === "rolling"}
+            onChange={(on) => go(anchorISO, on ? "rolling" : "calendar")}
           />
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => shift(-1)}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
-              aria-label="Previous"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <input
-              type="month"
-              value={`${anchorISO.slice(0, 4)}-${anchorISO.slice(5, 7)}`}
-              onChange={(e) => {
-                const v = e.target.value; // YYYY-MM
-                if (/^\d{4}-\d{2}$/.test(v)) go(`${v}-01`, mode);
-              }}
-              className="h-9 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
-            />
-            <button
-              onClick={() => shift(1)}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
-              aria-label="Next"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <DateStepper
+            value={anchorISO}
+            onChange={(iso) => go(iso, mode)}
+            onPrev={() => shift(-1)}
+            onNext={() => shift(1)}
+          />
         </div>
       </div>
 

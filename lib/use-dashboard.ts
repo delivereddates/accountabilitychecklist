@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import type { Task, TaskCompletion, User } from "./types";
+import type { Task, TaskCompletion, TaskNote, User } from "./types";
 
 export const DASHBOARD_KEY = "/api/dashboard";
 
@@ -9,6 +9,7 @@ export interface DashboardData {
   users: User[];
   tasks: Task[];
   completions: TaskCompletion[];
+  notes: TaskNote[];
 }
 
 async function fetcher(url: string): Promise<DashboardData> {

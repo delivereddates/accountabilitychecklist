@@ -1,9 +1,19 @@
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
+import { format, parseISO } from "date-fns";
 
 /** Merge Tailwind classes safely (clsx + tailwind-merge). */
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
+}
+
+/** Format a YYYY-MM-DD string as DD-MM-YY (e.g. "12-08-26"). */
+export function formatDDMMYY(iso: string): string {
+  try {
+    return format(parseISO(iso), "dd-MM-yy");
+  } catch {
+    return iso;
+  }
 }
 
 /** Format a Date as a local YYYY-MM-DD string (avoids UTC off-by-one). */

@@ -1,10 +1,10 @@
 "use client";
 
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { addDays, addYears, format, parseISO } from "date-fns";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { toISODate } from "@/lib/utils";
+import { Loader2 } from "lucide-react";
+import { cn, toISODate } from "@/lib/utils";
 import type { WindowMode } from "@/lib/dates";
 import {
   buildCompletionIndex,
@@ -14,7 +14,8 @@ import {
 } from "@/lib/scoring";
 import { percentColor } from "@/lib/colors";
 import type { Task, TaskCompletion, User } from "@/lib/types";
-import { ModeToggle } from "./ModeToggle";
+import { DateStepper } from "./DateStepper";
+import { RollingToggle } from "./RollingToggle";
 
 interface Props {
   users: User[];
@@ -34,6 +35,16 @@ const OUTER_PAD = 26;
 
 function polar(r: number, a: number): [number, number] {
   return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+}
+
+/** The subset of `days` that fall in the calendar quarter containing anchorISO. */
+function daysInQuarter(days: string[], anchorISO: string): string[] {
+  const a = parseISO(anchorISO);
+  const q = Math.floor(a.getMonth() / 3);
+  const y = a.getFullYear();
+  const startISO = toISODate(new Date(y, q * 3, 1));
+  const endISO = toISODate(new Date(y, q * 3 + 3, 0)); // last day of the quarter's last month
+  return days.filter((d) => d >= startISO && d <= endISO);
 }
 
 export function YearHeatmap(props: Props) {
@@ -67,9 +78,26 @@ export function YearHeatmap(props: Props) {
   const N = Math.max(1, users.length);
   const outerMax = SIZE / 2 - OUTER_PAD;
   const ringWidth = (outerMax - INNER_R0) / N;
-  const total = Math.max(1, days.length);
+
+  // Q toggle: zoom to the anchor date's current quarter (~91 days filling the
+  // circle). The geometry uses viewDays.length, so the subset is magnified.
+  const [quarter, setQuarter] = useState(false);
+  const viewDays = useMemo(
+    () => (quarter ? daysInQuarter(days, anchorISO) : days),
+    [days, anchorISO, quarter],
+  );
+  const total = Math.max(1, viewDays.length);
   const angleHalf = (Math.PI * 2) / total / 2;
   const startOffset = -Math.PI / 2;
+
+  // Defer the (many-paths) SVG render one frame so a spinner paints first
+  // instead of freezing the tab when it mounts / the window changes.
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    setReady(false);
+    const id = requestAnimationFrame(() => setReady(true));
+    return () => cancelAnimationFrame(id);
+  }, [viewDays, users]);
 
   const sectorPath = (dayIndex: number, ringIndex: number) => {
     const a0 = (dayIndex / total) * Math.PI * 2 + startOffset + angleHalf * 0.4;
@@ -92,8 +120,8 @@ export function YearHeatmap(props: Props) {
   };
 
   const monthMarks: { i: number; label: string; angle: number }[] = [];
-  for (let i = 0; i < days.length; i++) {
-    const dt = parseISO(days[i]);
+  for (let i = 0; i < viewDays.length; i++) {
+    const dt = parseISO(viewDays[i]);
     if (dt.getDate() === 1) {
       monthMarks.push({
         i,
@@ -119,39 +147,30 @@ export function YearHeatmap(props: Props) {
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <h1 className="shrink-0 text-lg font-semibold tracking-tight">Year</h1>
         <div className="ml-auto flex items-center gap-1.5">
-          <ModeToggle
-            mode={mode}
-            onChange={(m) => go(anchorISO, m)}
-            rollingLabel="Last 365"
-            calendarLabel="Year"
+          <RollingToggle
+            on={mode === "rolling"}
+            onChange={(on) => go(anchorISO, on ? "rolling" : "calendar")}
           />
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => shift(-1)}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
-              aria-label="Previous"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <input
-              type="number"
-              value={parseISO(anchorISO).getFullYear()}
-              min={2000}
-              max={2100}
-              onChange={(e) => {
-                const y = parseInt(e.target.value, 10);
-                if (!Number.isNaN(y)) go(`${y}-01-01`, "calendar");
-              }}
-              className="h-9 w-20 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-center text-base outline-none focus:border-[var(--color-check)]"
-            />
-            <button
-              onClick={() => shift(1)}
-              className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
-              aria-label="Next"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-          </div>
+          <button
+            type="button"
+            onClick={() => setQuarter((q) => !q)}
+            aria-pressed={quarter}
+            title={quarter ? "Zoomed to current quarter (click to show full year)" : "Zoom to current quarter"}
+            className={cn(
+              "h-9 w-9 shrink-0 rounded-lg border text-sm font-semibold transition-colors",
+              quarter
+                ? "border-transparent bg-[var(--color-check)] text-white"
+                : "border-[var(--border)] text-[var(--muted)] hover:bg-black/5 hover:text-[var(--foreground)]",
+            )}
+          >
+            Q
+          </button>
+          <DateStepper
+            value={anchorISO}
+            onChange={(iso) => go(iso, mode)}
+            onPrev={() => shift(-1)}
+            onNext={() => shift(1)}
+          />
         </div>
       </div>
 
@@ -162,6 +181,7 @@ export function YearHeatmap(props: Props) {
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-2">
+            {ready ? (
             <svg
               viewBox={`0 0 ${SIZE} ${SIZE}`}
               role="img"
@@ -195,13 +215,18 @@ export function YearHeatmap(props: Props) {
               })}
 
               <Segments
-                days={days}
+                days={viewDays}
                 userTasks={userTasks}
                 index={index}
                 sectorPath={sectorPath}
                 onHover={handleHover}
               />
             </svg>
+            ) : (
+              <div className="flex h-[560px] max-h-[80vh] items-center justify-center text-[var(--muted)]">
+                <Loader2 className="h-6 w-6 animate-spin" />
+              </div>
+            )}
           </div>
 
           <aside className="space-y-3">

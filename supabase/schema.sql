@@ -33,14 +33,27 @@ create table if not exists public.tasks (
   id         uuid primary key default gen_random_uuid(),
   user_id    uuid not null references public.users(id) on delete cascade,
   title      text not null,
-  notes      text not null default '',
   created_at timestamptz not null default now()
 );
 
--- Add notes column to pre-existing tables (idempotent). Safe to re-run.
-alter table public.tasks add column if not exists notes text not null default '';
+-- Notes moved to per-task-per-day (task_notes). Drop the old per-task column if
+-- a previous migration added it. Idempotent.
+alter table public.tasks drop column if exists notes;
 
 create index if not exists tasks_user_id_idx on public.tasks(user_id);
+
+-- ---------------------------------------------------------------------------
+-- task_notes: a free-text note for one task on one day (independent of status).
+-- ---------------------------------------------------------------------------
+create table if not exists public.task_notes (
+  id      uuid primary key default gen_random_uuid(),
+  task_id uuid not null references public.tasks(id) on delete cascade,
+  date    date not null,
+  note    text not null default '',
+  constraint task_notes_task_date_key unique (task_id, date)
+);
+
+create index if not exists task_notes_task_id_idx on public.task_notes(task_id);
 
 -- ---------------------------------------------------------------------------
 -- task_completions: the status of one task on one calendar day.
@@ -74,6 +87,7 @@ create index if not exists task_completions_task_id_idx    on public.task_comple
 alter table public.users             enable row level security;
 alter table public.tasks             enable row level security;
 alter table public.task_completions  enable row level security;
+alter table public.task_notes        enable row level security;
 
 -- ---------------------------------------------------------------------------
 -- Helpful upsert function used by the API: set a task's status for a date,

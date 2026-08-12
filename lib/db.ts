@@ -4,6 +4,7 @@ import type {
   CompletionStatus,
   Task,
   TaskCompletion,
+  TaskNote,
   User,
 } from "./types";
 
@@ -45,10 +46,18 @@ export async function getUsers(): Promise<User[]> {
 export async function getTasks(): Promise<Task[]> {
   const { data, error } = await admin()
     .from("tasks")
-    .select("id, user_id, title, notes, created_at")
+    .select("id, user_id, title, created_at")
     .order("created_at", { ascending: true });
   if (error) throw error;
   return (data ?? []) as Task[];
+}
+
+export async function getTaskNotes(): Promise<TaskNote[]> {
+  const { data, error } = await admin()
+    .from("task_notes")
+    .select("id, task_id, date, note");
+  if (error) throw error;
+  return (data ?? []) as TaskNote[];
 }
 
 export async function getCompletions(
@@ -83,14 +92,15 @@ export async function getDashboardData(fromISO: string, toISO: string) {
   return { users, tasks, completions };
 }
 
-/** Full dataset (all users, tasks, and completion history) for the client cache. */
+/** Full dataset (all users, tasks, notes, and completion history) for the client cache. */
 export async function getDashboardAll() {
-  const [users, tasks, completions] = await Promise.all([
+  const [users, tasks, completions, notes] = await Promise.all([
     getUsers(),
     getTasks(),
     getAllCompletions(),
+    getTaskNotes(),
   ]);
-  return { users, tasks, completions };
+  return { users, tasks, completions, notes };
 }
 
 // ---------------------------------------------------------------------------
@@ -107,35 +117,40 @@ export async function createUser(name: string): Promise<User> {
   return data as User;
 }
 
-export async function createTask(
-  userId: string,
-  title: string,
-  notes = "",
-): Promise<Task> {
+export async function createTask(userId: string, title: string): Promise<Task> {
   const { data, error } = await admin()
     .from("tasks")
-    .insert({ user_id: userId, title: title.trim(), notes })
-    .select("id, user_id, title, notes, created_at")
+    .insert({ user_id: userId, title: title.trim() })
+    .select("id, user_id, title, created_at")
     .single();
   if (error) throw error;
   return data as Task;
 }
 
-export async function updateTask(
-  id: string,
-  patch: { title?: string; notes?: string },
-): Promise<Task> {
-  const update: Record<string, string> = {};
-  if (typeof patch.title === "string") update.title = patch.title.trim();
-  if (typeof patch.notes === "string") update.notes = patch.notes;
+export async function updateTask(id: string, title: string): Promise<Task> {
   const { data, error } = await admin()
     .from("tasks")
-    .update(update)
+    .update({ title: title.trim() })
     .eq("id", id)
-    .select("id, user_id, title, notes, created_at")
+    .select("id, user_id, title, created_at")
     .single();
   if (error) throw error;
   return data as Task;
+}
+
+/** Upsert a per-task-per-day note (UNIQUE(task_id, date)). */
+export async function upsertTaskNote(
+  taskId: string,
+  dateISO: string,
+  note: string,
+): Promise<TaskNote> {
+  const { data, error } = await admin()
+    .from("task_notes")
+    .upsert({ task_id: taskId, date: dateISO, note }, { onConflict: "task_id,date" })
+    .select("id, task_id, date, note")
+    .single();
+  if (error) throw error;
+  return data as TaskNote;
 }
 
 export async function deleteTask(id: string): Promise<void> {

@@ -3,9 +3,14 @@
 import { useSWRConfig } from "swr";
 import { useDashboard, type DashboardData } from "./use-dashboard";
 import { buildCompletionIndex, getStatus, tasksActiveOnDate } from "./scoring";
-import type { CompletionStatus, Task, TaskCompletion } from "./types";
+import type { CompletionStatus, Task, TaskCompletion, TaskNote } from "./types";
 
-const EMPTY: DashboardData = { users: [], tasks: [], completions: [] };
+const EMPTY: DashboardData = {
+  users: [],
+  tasks: [],
+  completions: [],
+  notes: [],
+};
 
 // ---------------------------------------------------------------------------
 // Mutation coordinator
@@ -199,11 +204,11 @@ export function useMutations() {
     );
   };
 
-  const addTask = async (userId: string, title: string, notes = "") => {
+  const addTask = async (userId: string, title: string) => {
     const res = await fetchRetry("/api/tasks", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ user_id: userId, title, notes }),
+      body: JSON.stringify({ user_id: userId, title }),
     });
     if (!res.ok) throw new Error("add task failed");
     const { task } = (await res.json()) as { task: Task };
@@ -213,13 +218,13 @@ export function useMutations() {
     );
   };
 
-  const updateTask = (taskId: string, patch: { title?: string; notes?: string }) =>
+  const updateTask = (taskId: string, title: string) =>
     mutate(
       async (cur) => {
         const res = await fetchRetry(`/api/tasks/${taskId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(patch),
+          body: JSON.stringify({ title }),
         });
         if (!res.ok) throw new Error("update failed");
         const { task } = (await res.json()) as { task: Task };
@@ -232,9 +237,31 @@ export function useMutations() {
         optimisticData: (cur) => ({
           ...(cur ?? EMPTY),
           tasks: (cur ?? EMPTY).tasks.map((t) =>
-            t.id === taskId ? { ...t, ...patch } : t,
+            t.id === taskId ? { ...t, title } : t,
           ),
         }),
+        rollbackOnError: true,
+        populateCache: false,
+        revalidate: false,
+      },
+    );
+
+  /** Upsert a per-task-per-day note (debounced blur → one write). */
+  const setTaskNote = (taskId: string, date: string, note: string) =>
+    mutate(
+      async (cur) => {
+        const res = await fetchRetry("/api/notes", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ task_id: taskId, date, note }),
+        });
+        if (!res.ok) throw new Error("note failed");
+        const { note: saved } = (await res.json()) as { note: TaskNote };
+        return upsertNote(cur, saved);
+      },
+      {
+        optimisticData: (cur) =>
+          upsertNote(cur, { id: "tmp", task_id: taskId, date, note }),
         rollbackOnError: true,
         populateCache: false,
         revalidate: false,
@@ -251,6 +278,7 @@ export function useMutations() {
           ...base,
           tasks: base.tasks.filter((t) => t.id !== taskId),
           completions: base.completions.filter((c) => c.task_id !== taskId),
+          notes: base.notes.filter((n) => n.task_id !== taskId),
         };
       },
       {
@@ -260,6 +288,7 @@ export function useMutations() {
             ...base,
             tasks: base.tasks.filter((t) => t.id !== taskId),
             completions: base.completions.filter((c) => c.task_id !== taskId),
+            notes: base.notes.filter((n) => n.task_id !== taskId),
           };
         },
         rollbackOnError: true,
@@ -289,6 +318,7 @@ export function useMutations() {
     addUser,
     addTask,
     updateTask,
+    setTaskNote,
     deleteTask,
     deleteUser,
   };
@@ -337,5 +367,21 @@ function pruneUser(cur: DashboardData | undefined, userId: string): DashboardDat
     users: base.users.filter((u) => u.id !== userId),
     tasks: base.tasks.filter((t) => t.user_id !== userId),
     completions: base.completions.filter((c) => !taskIds.has(c.task_id)),
+    notes: base.notes.filter((n) => !taskIds.has(n.task_id)),
   };
+}
+
+function upsertNote(
+  cur: DashboardData | undefined,
+  note: TaskNote,
+): DashboardData {
+  const base = cur ?? EMPTY;
+  const idx = base.notes.findIndex(
+    (n) => n.task_id === note.task_id && n.date === note.date,
+  );
+  const notes =
+    idx >= 0
+      ? base.notes.map((n, i) => (i === idx ? { ...n, note: note.note } : n))
+      : [...base.notes, note];
+  return { ...base, notes };
 }

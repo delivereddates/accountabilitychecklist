@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { addDays, format, isToday, isYesterday, parseISO } from "date-fns";
-import { ChevronLeft, ChevronRight, Inbox, Pencil, Plus, Trash2 } from "lucide-react";
+import { Inbox, Pencil, Plus, Trash2 } from "lucide-react";
 import { toISODate } from "@/lib/utils";
 import type { CompletionStatus, Task, User } from "@/lib/types";
 import {
@@ -16,18 +16,17 @@ import { percentColor } from "@/lib/colors";
 import type { DashboardData } from "@/lib/use-dashboard";
 import { useMutations } from "@/lib/swr-mutations";
 import { ThreeWayToggle } from "./ThreeWayToggle";
+import { DateStepper } from "@/components/summary/DateStepper";
 
 type Mutations = ReturnType<typeof useMutations>;
-type TaskPatch = { title?: string; notes?: string };
 
 interface Props {
   data: DashboardData;
   mutations: Mutations;
   selectedDate: string;
-  todayISO: string;
 }
 
-export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) {
+export function DailyEditor({ data, mutations, selectedDate }: Props) {
   const [date, setDate] = useState(selectedDate);
   const [error, setError] = useState<string | null>(null);
   const [newUserName, setNewUserName] = useState("");
@@ -36,9 +35,16 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
     () => buildCompletionIndex(data.completions),
     [data.completions],
   );
+  const noteIndex = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const n of data.notes) m.set(`${n.task_id}|${n.date}`, n.note);
+    return m;
+  }, [data.notes]);
   const { users, tasks } = data;
 
   const statusOf = (d: string, tid: string) => getStatus(index, tid, d);
+  const noteFor = (taskId: string, d: string) =>
+    noteIndex.get(`${taskId}|${d}`) ?? "";
   const scoreForUser = (userId: string, d: string): Score =>
     scoreFromStatuses(
       tasksActiveOnDate(
@@ -46,8 +52,6 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
         d,
       ).map((t) => statusOf(d, t.id)),
     );
-  const scoreForAll = (d: string): Score =>
-    scoreFromStatuses(tasksActiveOnDate(tasks, d).map((t) => statusOf(d, t.id)));
 
   function handleSetStatus(d: string, taskId: string, s: CompletionStatus | null) {
     setError(null);
@@ -74,14 +78,18 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
         return false;
       });
   }
-  function handleUpdateTask(taskId: string, patch: TaskPatch) {
+  function handleRenameTask(taskId: string, title: string) {
     return mutations
-      .updateTask(taskId, patch)
+      .updateTask(taskId, title)
       .then(() => true)
       .catch(() => {
         setError("Couldn’t save task.");
         return false;
       });
+  }
+  function handleSetNote(taskId: string, d: string, note: string) {
+    setError(null);
+    mutations.setTaskNote(taskId, d, note).catch(() => setError("Couldn’t save note."));
   }
   function handleDeleteTask(taskId: string) {
     if (!window.confirm("Delete this task and all of its history?")) return;
@@ -101,11 +109,6 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
     setDate(toISODate(addDays(parseISO(date), days)));
   }
 
-  const overall = scoreForAll(date);
-  const overallPct =
-    overall.percent == null ? null : Math.round(overall.percent * 100);
-  const overallColor = percentColor(overall.percent);
-
   return (
     <div className="space-y-4">
       {error && (
@@ -114,50 +117,16 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
         </div>
       )}
 
-      {/* One-line header: date nav + overall % */}
+      {/* One-line header: date stepper (no Today button, no overall %) */}
       <div className="flex items-center gap-2 overflow-x-auto pb-1">
         <h1 className="shrink-0 text-lg font-semibold tracking-tight">Daily</h1>
-        <div className="ml-auto flex items-center gap-1.5">
-          <button
-            onClick={() => shift(-1)}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
-            aria-label="Previous day"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <input
-            type="date"
+        <div className="ml-auto">
+          <DateStepper
             value={date}
-            onChange={(e) => e.target.value && setDate(e.target.value)}
-            className="h-9 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-base outline-none focus:border-[var(--color-check)]"
+            onChange={setDate}
+            onPrev={() => shift(-1)}
+            onNext={() => shift(1)}
           />
-          <button
-            onClick={() => shift(1)}
-            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] hover:bg-black/5"
-            aria-label="Next day"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-          <button
-            onClick={() => setDate(todayISO)}
-            className="h-9 shrink-0 rounded-lg border border-[var(--border)] px-3 text-base font-medium hover:bg-black/5"
-          >
-            Today
-          </button>
-          <span
-            className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-sm"
-            style={{
-              borderColor: `color-mix(in srgb, ${overallColor} 40%, transparent)`,
-            }}
-            title="Overall completion for this day"
-          >
-            <span className="font-semibold" style={{ color: overallColor }}>
-              {overallPct == null ? "—" : `${overallPct}%`}
-            </span>
-            <span className="text-xs text-[var(--muted)]">
-              {overall.check}/{overall.denominator}
-            </span>
-          </span>
         </div>
       </div>
 
@@ -176,9 +145,11 @@ export function DailyEditor({ data, mutations, selectedDate, todayISO }: Props) 
               tasks={tasks.filter((t) => t.user_id === u.id)}
               selectedDate={date}
               statusOf={statusOf}
+              noteFor={noteFor}
               score={() => scoreForUser(u.id, date)}
               onSetStatus={handleSetStatus}
-              onUpdateTask={handleUpdateTask}
+              onRenameTask={handleRenameTask}
+              onSetNote={handleSetNote}
               onDeleteTask={handleDeleteTask}
               onAddTask={(title) => handleAddTask(u.id, title)}
               onDeleteUser={() => handleDeleteUser(u.id, u.name)}
@@ -211,9 +182,11 @@ function UserCard({
   tasks,
   selectedDate,
   statusOf,
+  noteFor,
   score,
   onSetStatus,
-  onUpdateTask,
+  onRenameTask,
+  onSetNote,
   onDeleteTask,
   onAddTask,
   onDeleteUser,
@@ -222,13 +195,15 @@ function UserCard({
   tasks: Task[];
   selectedDate: string;
   statusOf: (dateISO: string, taskId: string) => CompletionStatus | undefined;
+  noteFor: (taskId: string, dateISO: string) => string;
   score: () => Score;
   onSetStatus: (
     dateISO: string,
     taskId: string,
     status: CompletionStatus | null,
   ) => void;
-  onUpdateTask: (taskId: string, patch: TaskPatch) => Promise<boolean>;
+  onRenameTask: (taskId: string, title: string) => Promise<boolean>;
+  onSetNote: (taskId: string, dateISO: string, note: string) => void;
   onDeleteTask: (taskId: string) => void;
   onAddTask: (title: string) => Promise<boolean>;
   onDeleteUser: () => void;
@@ -265,8 +240,10 @@ function UserCard({
               task={task}
               selectedDate={selectedDate}
               status={statusOf(selectedDate, task.id)}
+              note={noteFor(task.id, selectedDate)}
               onSetStatus={onSetStatus}
-              onUpdate={onUpdateTask}
+              onRename={onRenameTask}
+              onSetNote={onSetNote}
               onDelete={onDeleteTask}
             />
           ))}
@@ -306,30 +283,34 @@ function TaskRow({
   task,
   selectedDate,
   status,
+  note,
   onSetStatus,
-  onUpdate,
+  onRename,
+  onSetNote,
   onDelete,
 }: {
   task: Task;
   selectedDate: string;
   status: CompletionStatus | undefined;
+  note: string;
   onSetStatus: (
     dateISO: string,
     taskId: string,
     status: CompletionStatus | null,
   ) => void;
-  onUpdate: (taskId: string, patch: TaskPatch) => Promise<boolean>;
+  onRename: (taskId: string, title: string) => Promise<boolean>;
+  onSetNote: (taskId: string, dateISO: string, note: string) => void;
   onDelete: (taskId: string) => void;
 }) {
   const active = tasksActiveOnDate([task], selectedDate).length > 0;
   const [showNotes, setShowNotes] = useState(false);
-  const hasNotes = !!task.notes?.trim();
+  const hasNotes = !!note?.trim();
 
   return (
     <li className="flex flex-col gap-1 border-t border-[var(--border)] py-2.5 first:border-t-0">
       <div className="flex items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1">
-          <TaskTitle title={task.title} onRename={(t) => onUpdate(task.id, { title: t })} />
+          <TaskTitle title={task.title} onRename={(t) => onRename(task.id, t)} />
           <button
             onClick={() => setShowNotes((v) => !v)}
             className={
@@ -365,9 +346,9 @@ function TaskRow({
       </div>
       {showNotes && (
         <TaskNotes
-          key={`${task.id}-${task.notes ?? ""}`}
-          notes={task.notes ?? ""}
-          onSave={(v) => onUpdate(task.id, { notes: v })}
+          key={`${task.id}|${selectedDate}`}
+          note={note}
+          onSave={(v) => onSetNote(task.id, selectedDate, v)}
         />
       )}
     </li>
@@ -375,21 +356,21 @@ function TaskRow({
 }
 
 function TaskNotes({
-  notes,
+  note,
   onSave,
 }: {
-  notes: string;
-  onSave: (v: string) => Promise<boolean>;
+  note: string;
+  onSave: (v: string) => void;
 }) {
-  const [v, setV] = useState(notes);
+  const [v, setV] = useState(note);
   return (
     <textarea
       value={v}
       onChange={(e) => setV(e.target.value)}
       onBlur={() => {
-        if (v !== notes) onSave(v);
+        if (v !== note) onSave(v);
       }}
-      placeholder="Notes…"
+      placeholder="Notes for this day…"
       rows={2}
       className="w-full resize-y rounded-lg border border-[var(--border)] bg-[var(--background)] px-2 py-1 text-sm outline-none focus:border-[var(--color-check)]"
     />

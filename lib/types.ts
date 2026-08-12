@@ -14,8 +14,14 @@ export interface Task {
   id: string;
   user_id: string;
   title: string;
-  notes: string;
   created_at: string;
+}
+
+export interface TaskNote {
+  id: string;
+  task_id: string;
+  date: string; // YYYY-MM-DD
+  note: string;
 }
 
 export interface TaskCompletion {

@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { DailyEditor } from "./DailyEditor";
 import { useDashboard } from "@/lib/use-dashboard";
@@ -32,8 +33,8 @@ export function DailyClient() {
 
   if (!data) {
     return (
-      <div className="flex min-h-[40vh] items-center justify-center text-sm text-[var(--muted)]">
-        Loading…
+      <div className="flex min-h-[40vh] items-center justify-center text-[var(--muted)]">
+        <Loader2 className="h-6 w-6 animate-spin" />
       </div>
     );
   }
@@ -43,7 +44,6 @@ export function DailyClient() {
       data={data}
       mutations={mutations}
       selectedDate={selectedDate}
-      todayISO={todayISO}
     />
   );
 }
