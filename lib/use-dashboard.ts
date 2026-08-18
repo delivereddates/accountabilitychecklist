@@ -14,6 +14,17 @@ export interface DashboardData {
 
 async function fetcher(url: string): Promise<DashboardData> {
   const res = await fetch(url);
+  if (res.status === 401) {
+    // Session gone/expired — hard-navigate (full reload clears client state).
+    if (typeof window !== "undefined") {
+      const from = window.location.pathname + window.location.search;
+      window.location.assign(
+        "/login" +
+          (from && from !== "/" ? `?from=${encodeURIComponent(from)}` : ""),
+      );
+    }
+    throw new Error("Not authenticated");
+  }
   if (!res.ok) throw new Error("Failed to load dashboard data");
   return res.json();
 }

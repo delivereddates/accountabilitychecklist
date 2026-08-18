@@ -29,7 +29,6 @@ interface Props {
 export function DailyEditor({ data, mutations, selectedDate }: Props) {
   const [date, setDate] = useState(selectedDate);
   const [error, setError] = useState<string | null>(null);
-  const [newUserName, setNewUserName] = useState("");
 
   const index = useMemo(
     () => buildCompletionIndex(data.completions),
@@ -57,17 +56,6 @@ export function DailyEditor({ data, mutations, selectedDate }: Props) {
     setError(null);
     if (s === null) mutations.clearCompletion(taskId, d);
     else mutations.setCompletion(taskId, d, s);
-  }
-  async function handleAddUser(e: React.FormEvent) {
-    e.preventDefault();
-    const name = newUserName.trim();
-    if (!name) return;
-    try {
-      await mutations.addUser(name);
-      setNewUserName("");
-    } catch {
-      setError("Couldn’t add user.");
-    }
   }
   function handleAddTask(userId: string, title: string) {
     return mutations
@@ -131,11 +119,7 @@ export function DailyEditor({ data, mutations, selectedDate }: Props) {
       </div>
 
       {users.length === 0 ? (
-        <EmptyState
-          value={newUserName}
-          onChange={setNewUserName}
-          onSubmit={handleAddUser}
-        />
+        <EmptyState />
       ) : (
         <div className="grid gap-4">
           {users.map((u) => (
@@ -155,11 +139,6 @@ export function DailyEditor({ data, mutations, selectedDate }: Props) {
               onDeleteUser={() => handleDeleteUser(u.id, u.name)}
             />
           ))}
-          <AddUserForm
-            value={newUserName}
-            onChange={setNewUserName}
-            onSubmit={handleAddUser}
-          />
         </div>
       )}
     </div>
@@ -465,46 +444,7 @@ function AddTaskForm({ onAdd }: { onAdd: (title: string) => Promise<boolean> }) 
   );
 }
 
-function AddUserForm({
-  value,
-  onChange,
-  onSubmit,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
-}) {
-  return (
-    <form
-      onSubmit={onSubmit}
-      className="flex items-center gap-2 rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)]/50 p-3"
-    >
-      <input
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="Add a new user (e.g. Oliver)…"
-        className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-base outline-none focus:border-[var(--color-check)]"
-      />
-      <button
-        type="submit"
-        disabled={!value.trim()}
-        className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-lg bg-[var(--color-check)] px-3 text-sm font-semibold text-white disabled:opacity-50"
-      >
-        <Plus className="h-4 w-4" /> Add user
-      </button>
-    </form>
-  );
-}
-
-function EmptyState({
-  value,
-  onChange,
-  onSubmit,
-}: {
-  value: string;
-  onChange: (v: string) => void;
-  onSubmit: (e: React.FormEvent) => void;
-}) {
+function EmptyState() {
   return (
     <div className="flex flex-col items-center gap-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)] px-6 py-12 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-check-soft)]">
@@ -513,24 +453,10 @@ function EmptyState({
       <div>
         <h2 className="text-base font-semibold">No users yet</h2>
         <p className="text-sm text-[var(--muted)]">
-          Add the first person to start tracking daily tasks.
+          Accounts are configured by the administrator — each person appears
+          here automatically after their first login.
         </p>
       </div>
-      <form onSubmit={onSubmit} className="flex w-full max-w-sm items-center gap-2">
-        <input
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          placeholder="User name (e.g. Oliver)"
-          className="h-9 min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-base outline-none focus:border-[var(--color-check)]"
-        />
-        <button
-          type="submit"
-          disabled={!value.trim()}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg bg-[var(--color-check)] px-3 text-sm font-semibold text-white disabled:opacity-50"
-        >
-          <Plus className="h-4 w-4" /> Add
-        </button>
-      </form>
     </div>
   );
 }

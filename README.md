@@ -1,11 +1,12 @@
 # Accountability Checklist
 
-A single-password, multi-user **daily accountability tracker**. One shared
-password gates the whole app; inside, you track daily task completion for
-several people, with daily / weekly / monthly / yearly summaries.
+A multi-user **daily accountability tracker**. Each person signs in with their
+own username/password (accounts are admin-managed via an environment
+variable); inside, everyone tracks daily task completion, with daily / weekly /
+monthly / yearly summaries and optional 11:00 / 17:00 / 21:00 push reminders.
 
 Built with **Next.js (App Router) · TypeScript · Tailwind CSS · iron-session ·
-Supabase · date-fns**.
+Supabase · date-fns · Web Push**.
 
 ---
 
@@ -22,24 +23,23 @@ cp .env.example .env.local   # then fill in real values
 
 | Var | Purpose |
 | --- | --- |
-| `APP_PASSWORD` | The single shared password to enter the app. |
+| `APP_USERS` | JSON array of accounts: `[{"username":"oliver","password":"…","name":"Oliver"}]`. The `name` maps to the user's row in the DB (created automatically on first login). |
 | `SESSION_SECRET` | ≥32 chars; encrypts the iron-session cookie (`openssl rand -hex 32`). |
 | `NEXT_PUBLIC_SUPABASE_URL` | Supabase project URL (browser-safe). |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Supabase anon/publishable key (browser-safe). |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase **service-role** key (SERVER ONLY — never expose). |
+| `NEXT_PUBLIC_VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` | Web Push keys (`npx web-push generate-vapid-keys`). |
+| `VAPID_SUBJECT` | Contact for push services, e.g. `mailto:you@example.com`. |
+| `CRON_SECRET` | Shared secret the hourly scheduler sends to `/api/cron/notify` (`openssl rand -hex 32`). |
 
 ### 2. Create the database schema
 
 Open your Supabase project → **SQL Editor → New query**, paste the contents of
 [`supabase/schema.sql`](supabase/schema.sql), and **Run**. It is idempotent
-(safe to re-run). This creates `users`, `tasks`, `task_completions`, the
-`task_status` enum, the `UNIQUE(task_id, date)` constraint, enables RLS, and
-adds a `set_completion()` helper.
-
-> **Why RLS with no public policies?** Auth here is a single app password, not
-> per-user Supabase accounts. All reads/writes go through server Route Handlers
-> using the **service-role** key (which bypasses RLS). The public anon key is
-> intentionally left powerless so the password gate is the only way in.
+(safe to re-run). This creates `users`, `tasks`, `task_completions`,
+`task_notes`, `user_settings`, `push_subscriptions`, `push_log`, enables RLS
+(no public policies — only the server, via the service-role key, can read or
+write), and adds a `set_completion()` helper.
 
 ### 3. Run
 
@@ -47,19 +47,35 @@ adds a `set_completion()` helper.
 npm run dev
 ```
 
-Open http://localhost:3000 → you're redirected to `/login`. Enter `APP_PASSWORD`.
+Open http://localhost:3000 → you're redirected to `/login`. Sign in with an
+account from `APP_USERS`.
 
 ---
 
 ## How it works
 
+### Accounts & auth
+
+- Accounts live in **`APP_USERS`** (admin-managed — edit it in Vercel →
+  Settings → Environment Variables, then redeploy). Adding or changing a
+  password is a config change; there is no in-app account management.
+- On first login, the account's `name` row is created in the `users` table
+  automatically.
+- [`middleware.ts`](middleware.ts) gates every route (API routes get `401`
+  JSON; pages redirect to `/login`) except `/login`, `/api/login`,
+  `/api/logout`, and `/api/cron/*` (which authenticates with `CRON_SECRET`).
+
 ### Data model
 
-- **`users`** — `{ id, name (unique), created_at }`
+- **`users`** — `{ id, name (unique), created_at }` (one row per person)
 - **`tasks`** — `{ id, user_id→users, title, created_at }` (recurring task owned by a user)
 - **`task_completions`** — `{ id, task_id→tasks, date (YYYY-MM-DD), status }`
-  with `UNIQUE(task_id, date)`. `status` ∈ `check | no_check | exempt` (default
-  `no_check`). **A missing row = `no_check`.**
+  with `UNIQUE(task_id, date)`. `status` ∈ `check | no_check | exempt`.
+  **A missing row = no data** (excluded from the score).
+- **`task_notes`** — a free-text note per task per day.
+- **`user_settings`** — per-user notification toggles + timezone.
+- **`push_subscriptions`** — one row per device/browser (Web Push).
+- **`push_log`** — dedupe table so each reminder fires exactly once.
 
 ### Scoring (exempt never counts against you)
 
@@ -72,27 +88,39 @@ percent     = checked_tasks / denominator   (null if denominator is 0 → "no da
 
 So "3 checked, 1 exempt, of 4" = 3/3 = **100%**.
 
+### Push notifications
+
+Each user toggles 11:00 / 17:00 / 21:00 reminders in **/settings** (times are
+in their own timezone — the browser reports it automatically). Delivery:
+
+1. An hourly **pg_cron** job in Supabase ([`supabase/cron.sql`](supabase/cron.sql),
+   run it once in the SQL editor) pings `/api/cron/notify` with `CRON_SECRET`.
+2. The route computes each user's local time; anyone who has **just passed**
+   an enabled slot (within the last 60 minutes) gets the reminder.
+3. `push_log` guarantees one send per user per day per slot.
+4. On iPhone/iPad, notifications require the app to be **installed to the Home
+   Screen** (Share → Add to Home Screen) — the Settings page explains this.
+
 ### Architecture
 
-- **Auth:** [`middleware.ts`](middleware.ts) gates every route except `/login`,
-  `/api/*`, and static assets via an iron-session cookie
-  ([`lib/session.ts`](lib/session.ts)). `/api/login` & `/api/logout` manage it.
 - **Data access:** all DB calls are server-side through
-  [`lib/db.ts`](lib/db.ts) (service-role client). The browser client
-  ([`lib/supabase.ts`](lib/supabase.ts)) is RLS-locked and unused for data.
-- **Mutations** go through REST-ish route handlers under `app/api/`
-  (`users`, `tasks`, `tasks/[id]`, `completions`) and are called from the Daily
-  editor with optimistic UI.
+  [`lib/db.ts`](lib/db.ts) (service-role client, bypasses RLS). The browser
+  client ([`lib/supabase.ts`](lib/supabase.ts)) is RLS-locked and unused for data.
+- **Mutations** go through route handlers under `app/api/` with optimistic UI
+  ([`lib/swr-mutations.ts`](lib/swr-mutations.ts) — the frontend cache is the
+  source of truth for the session; saves are debounced and only reconciled on
+  failure).
 
 ### Pages
 
 | Route | Purpose |
 | --- | --- |
-| `/login` | Single-password entrance. |
-| `/` (Daily) | Edit today vs. yesterday side-by-side; 3-way toggles; add users & tasks. |
+| `/login` | Per-account sign-in. |
+| `/` (Daily) | Edit any day; 3-way toggles; notes; add/rename/delete tasks. |
 | `/week` | Task × 7-day matrix (`?mode=rolling` last-7 vs `calendar` Mon–Sun). |
 | `/month` | Calendar density grid with per-user dots (`rolling` 30 vs calendar month). |
-| `/year` | Concentric-rings SVG heatmap — one ring per user, 365 radial day-segments, hover for day breakdown. |
+| `/year` | Concentric-rings SVG heatmap (`Q` toggles a quarter-quadrant view). |
+| `/settings` | Notification toggles + enable/disable/test push on this device. |
 
 All summary pages support `?date=YYYY-MM-DD` (and `?mode=`) deep-links.
 
@@ -113,13 +141,26 @@ npm run lint    # eslint
 
 1. Push this folder to a Git repository (GitHub/GitLab/Bitbucket).
 2. Import the repo in Vercel.
-3. Add the five env vars above in **Project → Settings → Environment Variables**.
-   `SESSION_SECRET` must be ≥32 chars; set a real `APP_PASSWORD`.
-4. Deploy. Ensure the Supabase schema (step 2 above) has been run.
+3. Add all the env vars above in **Project → Settings → Environment
+   Variables** and deploy. Ensure the Supabase schema has been run.
+4. In the Supabase SQL editor, run [`supabase/cron.sql`](supabase/cron.sql)
+   with your real `CRON_SECRET` (and production URL) to schedule the hourly
+   notification tick. Verify with `select * from cron.job;` and
+   `select * from net._http_response order by id desc limit 5;`.
+
+### Managing accounts
+
+- **Add a person:** append `{username, password, name}` to `APP_USERS` in
+  Vercel → redeploy → they log in and their user row appears automatically.
+- **Change a password / remove access:** edit `APP_USERS` → redeploy. (To
+  fully remove someone's data, also delete their user on the Daily page,
+  which cascades to tasks/history/settings/subscriptions.)
 
 ## Security notes
 
 - `.env.local` and the service-role key are gitignored — never commit them.
 - Rotate any credential that has been shared in plaintext.
-- To harden further: restrict Supabase by project API settings, and consider
-  moving `APP_PASSWORD` checks behind rate-limiting if exposed to the public.
+- `APP_USERS` holds plain-text passwords; treat the env var with the same care
+  as the service-role key (only admins can read Vercel env vars).
+- `/api/cron/notify` requires `Authorization: Bearer <CRON_SECRET>` and is
+  disabled (404) when the secret isn't configured.

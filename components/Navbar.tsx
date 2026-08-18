@@ -5,12 +5,14 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
+import { resetCoordinator } from "@/lib/swr-mutations";
 
 const LINKS = [
   { href: "/", label: "Daily" },
   { href: "/week", label: "Week" },
   { href: "/month", label: "Month" },
   { href: "/year", label: "Year" },
+  { href: "/settings", label: "Settings" },
 ];
 
 export function Navbar() {
@@ -18,6 +20,8 @@ export function Navbar() {
   const router = useRouter();
 
   async function handleLogout() {
+    // Drop any queued debounced writes first so they can't fire after logout.
+    resetCoordinator();
     await fetch("/api/logout", { method: "POST" });
     router.push("/login");
     router.refresh();

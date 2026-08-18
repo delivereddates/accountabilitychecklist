@@ -2,6 +2,12 @@ import type { SessionOptions } from "iron-session";
 
 export interface SessionData {
   isLoggedIn: boolean;
+  /** The DB users.id of the logged-in person (absent on pre-migration cookies). */
+  userId?: string;
+  /** The APP_USERS username they logged in with. */
+  username?: string | null;
+  /** Their display name (users.name). */
+  name?: string;
 }
 
 /**
@@ -27,6 +33,10 @@ function readSessionSecret(): string {
 export const sessionOptions: SessionOptions = {
   password: readSessionSecret(),
   cookieName: "checklist_session",
+  // `ttl` is how long the encrypted seal itself stays valid — it is separate
+  // from the cookie's maxAge and defaults to only 14 days, which used to log
+  // people out despite the 1-year cookie. Keep both at 1 year.
+  ttl: 60 * 60 * 24 * 365,
   cookieOptions: {
     httpOnly: true,
     secure: process.env.NODE_ENV === "production",

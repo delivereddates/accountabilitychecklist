@@ -98,9 +98,25 @@ export function resyncWhenIdle() {
 }
 
 /**
+ * Drop any queued (not yet flushed) writes — called on logout so the previous
+ * user's debounced saves can't fire after their session is gone. In-flight
+ * requests are left to finish; the next login re-fetches from scratch.
+ */
+export function resetCoordinator() {
+  pending.clear();
+  if (timer) {
+    clearTimeout(timer);
+    timer = null;
+  }
+  needsReconcile = false;
+  resyncRequested = false;
+}
+
+/**
  * fetch with a few retries on transient (5xx / network) failures. Supabase
  * occasionally returns "JWT issued at future" on clock skew — a quick retry
- * usually clears it. 4xx are returned as-is (not retried).
+ * usually clears it. 4xx are returned as-is (not retried); a 401 bounces to
+ * the login page (session expired).
  */
 async function fetchRetry(
   url: string,
@@ -111,6 +127,10 @@ async function fetchRetry(
   for (let i = 0; i < attempts; i++) {
     try {
       const res = await fetch(url, init);
+      if (res.status === 401) {
+        redirectOn401();
+        throw new Error("unauthenticated");
+      }
       if (res.ok || res.status < 500) return res;
       last = new Error(`HTTP ${res.status}`);
     } catch (e) {
@@ -119,6 +139,15 @@ async function fetchRetry(
     await new Promise((r) => setTimeout(r, 250 * (i + 1)));
   }
   throw last instanceof Error ? last : new Error("request failed");
+}
+
+/** Hard-navigate to /login (a full reload clears all client state). */
+function redirectOn401() {
+  if (typeof window === "undefined") return;
+  const from = window.location.pathname + window.location.search;
+  window.location.assign(
+    "/login" + (from && from !== "/" ? `?from=${encodeURIComponent(from)}` : ""),
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -188,20 +217,6 @@ export function useMutations() {
     applyWrites([{ kind: "clear", taskId, date }]);
     pending.set(keyOf(taskId, date), { kind: "clear", taskId, date });
     scheduleFlush();
-  };
-
-  const addUser = async (name: string) => {
-    const res = await fetchRetry("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name }),
-    });
-    if (!res.ok) throw new Error("add user failed");
-    const { user } = (await res.json()) as { user: DashboardData["users"][number] };
-    await mutate(
-      (cur) => ({ ...(cur ?? EMPTY), users: [...(cur ?? EMPTY).users, user] }),
-      { revalidate: false },
-    );
   };
 
   const addTask = async (userId: string, title: string) => {
@@ -315,7 +330,6 @@ export function useMutations() {
   return {
     setCompletion,
     clearCompletion,
-    addUser,
     addTask,
     updateTask,
     setTaskNote,

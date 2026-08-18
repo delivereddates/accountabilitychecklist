@@ -10,11 +10,13 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: "#f6f7f9",
     theme_color: "#16a34a",
     icons: [
-      // 192 "any" + 512 "maskable" — the pair Android/Chrome require for
-      // installability; /apple-icon covers iOS via <link rel="apple-touch-icon">.
-      { src: "/icon-192", sizes: "192x192", type: "image/png", purpose: "any" },
+      // Static PNGs in public/ (the dashed icon-*.tsx route filenames were
+      // never registered as routes by this Next version). 192 "any" + 512
+      // "maskable" is the pair Android/Chrome require for installability;
+      // /apple-icon covers iOS via <link rel="apple-touch-icon">.
+      { src: "/icon-192.png", sizes: "192x192", type: "image/png", purpose: "any" },
       {
-        src: "/icon-512",
+        src: "/icon-512.png",
         sizes: "512x512",
         type: "image/png",
         purpose: "maskable",

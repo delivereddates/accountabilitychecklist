@@ -116,7 +116,7 @@ export function WeekView(props: Props) {
                   colSpan={days.length + 1}
                   className="px-3 py-8 text-center text-[var(--muted)]"
                 >
-                  No users yet — add some on the Daily page.
+                  No users yet — accounts are configured by the administrator.
                 </td>
               </tr>
             )}

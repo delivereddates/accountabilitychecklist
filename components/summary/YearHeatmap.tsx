@@ -190,7 +190,8 @@ export function YearHeatmap(props: Props) {
 
       {users.length === 0 ? (
         <p className="rounded-xl border border-dashed border-[var(--border)] bg-[var(--card)] px-4 py-10 text-center text-[var(--muted)]">
-          No users yet — add some on the Daily page to see the yearly heatmap.
+          No users yet — accounts are configured by the administrator; each
+          person appears after their first login.
         </p>
       ) : (
         <div className="grid gap-4 lg:grid-cols-[1fr_18rem]">

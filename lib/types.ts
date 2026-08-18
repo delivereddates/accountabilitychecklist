@@ -30,3 +30,20 @@ export interface TaskCompletion {
   date: string; // YYYY-MM-DD
   status: CompletionStatus;
 }
+
+/** Per-user notification settings (user_settings row; missing row = defaults). */
+export interface UserSettings {
+  notify_11: boolean;
+  notify_17: boolean;
+  notify_21: boolean;
+  timezone: string | null; // IANA name, e.g. "America/New_York"
+}
+
+/** One browser/device push subscription (push_subscriptions row). */
+export interface PushSubscriptionRow {
+  id: string;
+  user_id: string;
+  endpoint: string;
+  p256dh: string;
+  auth: string;
+}

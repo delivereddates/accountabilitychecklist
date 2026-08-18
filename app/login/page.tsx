@@ -2,10 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { ListChecks, Lock } from "lucide-react";
+import { ListChecks, Lock, User } from "lucide-react";
 
 export default function LoginPage() {
   const router = useRouter();
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
@@ -18,7 +19,7 @@ export default function LoginPage() {
     const res = await fetch("/api/login", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ password }),
+      body: JSON.stringify({ username, password }),
     });
 
     if (res.ok) {
@@ -45,7 +46,7 @@ export default function LoginPage() {
             Accountability Checklist
           </h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
-            Enter the shared password to continue.
+            Sign in with your account.
           </p>
         </div>
 
@@ -53,9 +54,27 @@ export default function LoginPage() {
           onSubmit={handleSubmit}
           className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-5 shadow-sm"
         >
+          <label htmlFor="username" className="mb-1.5 block text-sm font-medium">
+            Username
+          </label>
+          <div className="relative">
+            <User className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
+            <input
+              id="username"
+              name="username"
+              type="text"
+              autoFocus
+              autoComplete="username"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              className="w-full rounded-lg border border-[var(--border)] bg-white py-2 pl-9 pr-3 text-sm outline-none transition focus:border-[var(--color-check)] focus:ring-2 focus:ring-[var(--color-check-soft)]"
+              placeholder="your username"
+            />
+          </div>
+
           <label
             htmlFor="password"
-            className="mb-1.5 block text-sm font-medium"
+            className="mb-1.5 mt-4 block text-sm font-medium"
           >
             Password
           </label>
@@ -63,8 +82,8 @@ export default function LoginPage() {
             <Lock className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[var(--muted)]" />
             <input
               id="password"
+              name="password"
               type="password"
-              autoFocus
               autoComplete="current-password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -79,7 +98,7 @@ export default function LoginPage() {
 
           <button
             type="submit"
-            disabled={loading || !password}
+            disabled={loading || !username || !password}
             className="mt-4 w-full rounded-lg bg-[var(--color-check)] py-2 text-sm font-semibold text-white transition hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Signing in…" : "Sign In"}
