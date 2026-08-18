@@ -27,14 +27,18 @@ interface Props {
 }
 
 const SIZE = 560;
-const CX = SIZE / 2;
-const CY = SIZE / 2;
 const INNER_R0 = 64;
 const RING_GAP = 1.5;
 const OUTER_PAD = 26;
+const CORNER = 46; // quadrant pie-corner inset from the canvas edges
+// Geometry per mode. Full circle: centered, 360°. Quadrant: a 90° wedge with
+// the pie corner at the bottom-left of the canvas and the arc opening to the
+// top-right — literally ¼ of a circle.
+const FULL = { cx: SIZE / 2, cy: SIZE / 2, sweep: Math.PI * 2, rot: -Math.PI / 2 };
+const QUAD = { cx: CORNER, cy: SIZE - CORNER, sweep: Math.PI / 2, rot: -Math.PI / 2 };
 
-function polar(r: number, a: number): [number, number] {
-  return [CX + r * Math.cos(a), CY + r * Math.sin(a)];
+function polar(g: typeof FULL, r: number, a: number): [number, number] {
+  return [g.cx + r * Math.cos(a), g.cy + r * Math.sin(a)];
 }
 
 /** The subset of `days` that fall in the calendar quarter containing anchorISO. */
@@ -76,19 +80,25 @@ export function YearHeatmap(props: Props) {
   const clearHover = useCallback(() => setHover(null), []);
 
   const N = Math.max(1, users.length);
-  const outerMax = SIZE / 2 - OUTER_PAD;
-  const ringWidth = (outerMax - INNER_R0) / N;
-
-  // Q toggle: zoom to the anchor date's current quarter (~91 days filling the
-  // circle). The geometry uses viewDays.length, so the subset is magnified.
-  const [quarter, setQuarter] = useState(false);
+  // Q toggle: render the anchor date's current quarter (~91 days) as a 90°
+  // quadrant — a quarter-circle wedge — instead of the full-year circle.
+  // Defaults to ON when the page is entered.
+  const [quarter, setQuarter] = useState(true);
   const viewDays = useMemo(
     () => (quarter ? daysInQuarter(days, anchorISO) : days),
     [days, anchorISO, quarter],
   );
+  const geo = quarter ? QUAD : FULL;
+  // Largest radius that fits: half-canvas minus padding (full circle), or the
+  // distance from the corner to the canvas's far corner minus padding (quadrant).
+  const outerMax =
+    geo === FULL
+      ? SIZE / 2 - OUTER_PAD
+      : Math.hypot(SIZE - CORNER, SIZE - CORNER) - OUTER_PAD;
+  const ringWidth = (outerMax - INNER_R0) / N;
   const total = Math.max(1, viewDays.length);
-  const angleHalf = (Math.PI * 2) / total / 2;
-  const startOffset = -Math.PI / 2;
+  const angleHalf = geo.sweep / total / 2;
+  const startOffset = geo.rot;
 
   // Defer the (many-paths) SVG render one frame so a spinner paints first
   // instead of freezing the tab when it mounts / the window changes.
@@ -100,15 +110,15 @@ export function YearHeatmap(props: Props) {
   }, [viewDays, users]);
 
   const sectorPath = (dayIndex: number, ringIndex: number) => {
-    const a0 = (dayIndex / total) * Math.PI * 2 + startOffset + angleHalf * 0.4;
+    const a0 = (dayIndex / total) * geo.sweep + startOffset + angleHalf * 0.4;
     const a1 =
-      ((dayIndex + 1) / total) * Math.PI * 2 + startOffset - angleHalf * 0.4;
+      ((dayIndex + 1) / total) * geo.sweep + startOffset - angleHalf * 0.4;
     const r0 = INNER_R0 + ringIndex * ringWidth;
     const r1 = r0 + ringWidth - RING_GAP;
-    const [x1, y1] = polar(r1, a0);
-    const [x2, y2] = polar(r1, a1);
-    const [x3, y3] = polar(r0, a1);
-    const [x4, y4] = polar(r0, a0);
+    const [x1, y1] = polar(geo, r1, a0);
+    const [x2, y2] = polar(geo, r1, a1);
+    const [x3, y3] = polar(geo, r0, a1);
+    const [x4, y4] = polar(geo, r0, a0);
     const large = a1 - a0 > Math.PI ? 1 : 0;
     return `M${x1.toFixed(2)},${y1.toFixed(2)} A${r1.toFixed(2)},${r1.toFixed(
       2,
@@ -126,7 +136,7 @@ export function YearHeatmap(props: Props) {
       monthMarks.push({
         i,
         label: format(dt, "MMM"),
-        angle: ((i + 0.5) / total) * Math.PI * 2 + startOffset,
+        angle: ((i + 0.5) / total) * geo.sweep + startOffset,
       });
     }
   }
@@ -155,7 +165,11 @@ export function YearHeatmap(props: Props) {
             type="button"
             onClick={() => setQuarter((q) => !q)}
             aria-pressed={quarter}
-            title={quarter ? "Zoomed to current quarter (click to show full year)" : "Zoom to current quarter"}
+            title={
+              quarter
+                ? "Showing current quarter as a quadrant (click for full-year circle)"
+                : "Zoom to current quarter (quadrant)"
+            }
             className={cn(
               "h-9 w-9 shrink-0 rounded-lg border text-sm font-semibold transition-colors",
               quarter
@@ -190,15 +204,32 @@ export function YearHeatmap(props: Props) {
               onMouseLeave={clearHover}
             >
               <circle
-                cx={CX}
-                cy={CY}
+                cx={geo.cx}
+                cy={geo.cy}
                 r={INNER_R0 - 6}
                 fill="var(--card)"
                 stroke="var(--border)"
               />
+              {/* Quadrant: close the wedge with straight edges along the two
+                  radii so it reads as a solid quarter circle. */}
+              {quarter && (
+                <path
+                  d={`M${geo.cx},${geo.cy} L${polar(geo, outerMax, geo.rot)[0].toFixed(2)},${polar(
+                    geo,
+                    outerMax,
+                    geo.rot,
+                  )[1].toFixed(2)} A${outerMax.toFixed(2)},${outerMax.toFixed(2)} 0 0 1 ${polar(
+                    geo,
+                    outerMax,
+                    geo.rot + geo.sweep,
+                  )[0].toFixed(2)},${polar(geo, outerMax, geo.rot + geo.sweep)[1].toFixed(2)} Z`}
+                  fill="none"
+                  stroke="var(--border)"
+                />
+              )}
 
               {monthMarks.map((m, idx) => {
-                const [x, y] = polar(outerMax + 14, m.angle);
+                const [x, y] = polar(geo, outerMax + 14, m.angle);
                 return (
                   <text
                     key={`m-${idx}`}

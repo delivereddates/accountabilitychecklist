@@ -27,7 +27,11 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match everything except: /login, /api/*, Next internals, favicon.
-    "/((?!login|api|_next/static|_next/image|favicon.ico|.*\\..*).*)",
+    // Match everything except: /login, /api/*, Next internals, favicon, and
+    // the PWA/icon routes. Icons + manifest MUST be reachable without auth —
+    // iOS/Android fetch them without session cookies when adding to the home
+    // screen, and a redirect to /login serves HTML where a PNG is expected
+    // (the broken-home-screen-icon bug).
+    "/((?!login|api|_next/static|_next/image|favicon.ico|icon|apple-icon|apple-touch-icon|manifest|.*\\..*).*)",
   ],
 };

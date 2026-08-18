@@ -1,11 +1,10 @@
 import { ImageResponse } from "next/og";
 
-export const size = { width: 180, height: 180 };
+export const size = { width: 192, height: 192 };
 export const contentType = "image/png";
 
-// iOS home-screen icon: 180×180, FULLY OPAQUE green background (transparent
-// pixels render as black on iOS). iOS applies its own corner mask.
-export default function AppleIcon() {
+// Android "any" icon — full-bleed green, logo centered.
+export default function Icon192() {
   return new ImageResponse(
     (
       <div
@@ -19,8 +18,8 @@ export default function AppleIcon() {
         }}
       >
         <svg
-          width={120}
-          height={120}
+          width={124}
+          height={124}
           viewBox="0 0 24 24"
           fill="none"
           stroke="white"

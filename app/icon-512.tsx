@@ -1,11 +1,12 @@
 import { ImageResponse } from "next/og";
 
-export const size = { width: 180, height: 180 };
+export const size = { width: 512, height: 512 };
 export const contentType = "image/png";
 
-// iOS home-screen icon: 180×180, FULLY OPAQUE green background (transparent
-// pixels render as black on iOS). iOS applies its own corner mask.
-export default function AppleIcon() {
+// Maskable icon: Android crops this to a squircle/circle, so the logo is kept
+// inside the safe zone — the middle 80% circle (~410px of the 512px canvas) —
+// by scaling it to 260px (≈51% of the canvas). Fully opaque background.
+export default function Icon512() {
   return new ImageResponse(
     (
       <div
@@ -19,8 +20,8 @@ export default function AppleIcon() {
         }}
       >
         <svg
-          width={120}
-          height={120}
+          width={260}
+          height={260}
           viewBox="0 0 24 24"
           fill="none"
           stroke="white"
