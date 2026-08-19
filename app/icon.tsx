@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { OliveMark } from "@/components/OliveMark";
 
 export const size = { width: 32, height: 32 };
 export const contentType = "image/png";
@@ -17,19 +18,7 @@ export default function Icon() {
           justifyContent: "center",
         }}
       >
-        <svg
-          width={22}
-          height={22}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="white"
-          strokeWidth={3}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M3 19 12 4 21 19" />
-          <path d="M8 14h8" />
-        </svg>
+        <OliveMark height={26} />
       </div>
     ),
     { ...size },

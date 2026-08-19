@@ -1,4 +1,5 @@
 import { ImageResponse } from "next/og";
+import { OliveMark } from "@/components/OliveMark";
 
 export const size = { width: 180, height: 180 };
 export const contentType = "image/png";
@@ -18,19 +19,7 @@ export default function AppleIcon() {
           justifyContent: "center",
         }}
       >
-        <svg
-          width={120}
-          height={120}
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="white"
-          strokeWidth={2.5}
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        >
-          <path d="M3 19 12 4 21 19" />
-          <path d="M8 14h8" />
-        </svg>
+        <OliveMark height={148} />
       </div>
     ),
     { ...size },
