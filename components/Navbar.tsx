@@ -2,17 +2,19 @@
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LogOut } from "lucide-react";
+import { LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
 import { resetCoordinator } from "@/lib/swr-mutations";
 
-const LINKS = [
-  { href: "/", label: "Daily" },
-  { href: "/week", label: "Week" },
-  { href: "/month", label: "Month" },
-  { href: "/year", label: "Year" },
-  { href: "/settings", label: "Settings" },
+// Single-letter labels keep the bar compact on phones; the full name shows
+// on hover/long-press via title, and screen readers use aria-label.
+const LINKS: { href: string; label: string; aria: string }[] = [
+  { href: "/", label: "D", aria: "Daily" },
+  { href: "/week", label: "W", aria: "Week" },
+  { href: "/month", label: "M", aria: "Month" },
+  { href: "/year", label: "Y", aria: "Year" },
+  { href: "/settings", label: "⚙", aria: "Settings" },
 ];
 
 export function Navbar() {
@@ -46,14 +48,20 @@ export function Navbar() {
               <Link
                 key={l.href}
                 href={l.href}
+                title={l.aria}
+                aria-label={l.aria}
                 className={cn(
-                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  "flex h-9 w-9 items-center justify-center rounded-md text-sm font-semibold transition-colors",
                   active
                     ? "bg-[var(--color-check-soft)] text-[var(--color-check)]"
                     : "text-[var(--muted)] hover:bg-black/5 hover:text-[var(--foreground)]",
                 )}
               >
-                {l.label}
+                {l.href === "/settings" ? (
+                  <Settings className="h-4.5 w-4.5" />
+                ) : (
+                  l.label
+                )}
               </Link>
             );
           })}
@@ -61,10 +69,11 @@ export function Navbar() {
 
         <button
           onClick={handleLogout}
-          className="ml-auto inline-flex items-center gap-1.5 rounded-md border border-[var(--border)] px-3 py-1.5 text-sm font-medium transition-colors hover:bg-black/5"
+          title="Log Out"
+          aria-label="Log Out"
+          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)] transition-colors hover:bg-black/5"
         >
           <LogOut className="h-4 w-4" />
-          <span className="hidden sm:inline">Log Out</span>
         </button>
       </div>
     </header>

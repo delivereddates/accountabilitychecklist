@@ -17,7 +17,7 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
  * Daily asks the coordinator to re-fetch once it's idle (never clobbering
  * in-flight writes).
  */
-export function DailyClient() {
+export function DailyClient({ currentUserId }: { currentUserId: string }) {
   const params = useSearchParams();
   const todayISO = toISODate(new Date());
   const dateParam = params.get("date");
@@ -44,6 +44,7 @@ export function DailyClient() {
       data={data}
       mutations={mutations}
       selectedDate={selectedDate}
+      currentUserId={currentUserId}
     />
   );
 }

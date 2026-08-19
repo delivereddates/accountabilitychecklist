@@ -162,6 +162,16 @@ export async function createTask(userId: string, title: string): Promise<Task> {
   return data as Task;
 }
 
+export async function getTaskById(id: string): Promise<Task | null> {
+  const { data, error } = await admin()
+    .from("tasks")
+    .select("id, user_id, title, created_at")
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  return (data as Task) ?? null;
+}
+
 export async function updateTask(id: string, title: string): Promise<Task> {
   const { data, error } = await admin()
     .from("tasks")
@@ -190,12 +200,6 @@ export async function upsertTaskNote(
 
 export async function deleteTask(id: string): Promise<void> {
   const { error } = await admin().from("tasks").delete().eq("id", id);
-  if (error) throw error;
-}
-
-/** Delete a user; cascades to their tasks and all completion history (FK cascade). */
-export async function deleteUser(id: string): Promise<void> {
-  const { error } = await admin().from("users").delete().eq("id", id);
   if (error) throw error;
 }
 

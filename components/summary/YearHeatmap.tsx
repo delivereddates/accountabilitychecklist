@@ -30,12 +30,19 @@ const SIZE = 560;
 const INNER_R0 = 64;
 const RING_GAP = 1.5;
 const OUTER_PAD = 26;
-const CORNER = 46; // quadrant pie-corner inset from the canvas edges
+const QUAD_SIZE = 320; // quadrant-mode canvas — smaller than the full circle
+const QUAD_CORNER = 22; // quadrant pie-corner inset from the canvas edges
 // Geometry per mode. Full circle: centered, 360°. Quadrant: a 90° wedge with
-// the pie corner at the bottom-left of the canvas and the arc opening to the
-// top-right — literally ¼ of a circle.
-const FULL = { cx: SIZE / 2, cy: SIZE / 2, sweep: Math.PI * 2, rot: -Math.PI / 2 };
-const QUAD = { cx: CORNER, cy: SIZE - CORNER, sweep: Math.PI / 2, rot: -Math.PI / 2 };
+// the pie corner at the bottom-left of its own compact canvas and the arc
+// opening to the top-right — literally ¼ of a circle.
+const FULL = { size: SIZE, cx: SIZE / 2, cy: SIZE / 2, sweep: Math.PI * 2, rot: -Math.PI / 2 };
+const QUAD = {
+  size: QUAD_SIZE,
+  cx: QUAD_CORNER,
+  cy: QUAD_SIZE - QUAD_CORNER,
+  sweep: Math.PI / 2,
+  rot: -Math.PI / 2,
+};
 
 function polar(g: typeof FULL, r: number, a: number): [number, number] {
   return [g.cx + r * Math.cos(a), g.cy + r * Math.sin(a)];
@@ -89,12 +96,15 @@ export function YearHeatmap(props: Props) {
     [days, anchorISO, quarter],
   );
   const geo = quarter ? QUAD : FULL;
-  // Largest radius that fits: half-canvas minus padding (full circle), or the
-  // distance from the corner to the canvas's far corner minus padding (quadrant).
+  // Largest radius that fits. Full circle: half-canvas minus padding. Quadrant:
+  // the wedge spans up and right from the corner point, so its extreme points
+  // are (cx, cy−r) and (cx+r, cy) — the bound is the canvas edge, NOT the
+  // diagonal (the diagonal overflows the viewBox, which is how this view used
+  // to spill past the screen).
   const outerMax =
     geo === FULL
       ? SIZE / 2 - OUTER_PAD
-      : Math.hypot(SIZE - CORNER, SIZE - CORNER) - OUTER_PAD;
+      : QUAD_SIZE - QUAD_CORNER - OUTER_PAD;
   const ringWidth = (outerMax - INNER_R0) / N;
   const total = Math.max(1, viewDays.length);
   const angleHalf = geo.sweep / total / 2;
@@ -198,10 +208,11 @@ export function YearHeatmap(props: Props) {
           <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-2">
             {ready ? (
             <svg
-              viewBox={`0 0 ${SIZE} ${SIZE}`}
+              viewBox={`0 0 ${geo.size} ${geo.size}`}
               role="img"
               aria-label="Yearly completion heatmap, one ring per user"
-              className="mx-auto block h-auto w-full max-w-[560px]"
+              className="mx-auto block h-auto w-full"
+              style={{ maxWidth: geo.size }}
               onMouseLeave={clearHover}
             >
               <circle
@@ -230,7 +241,7 @@ export function YearHeatmap(props: Props) {
               )}
 
               {monthMarks.map((m, idx) => {
-                const [x, y] = polar(geo, outerMax + 14, m.angle);
+                const [x, y] = polar(geo, outerMax + 12, m.angle);
                 return (
                   <text
                     key={`m-${idx}`}
@@ -239,7 +250,7 @@ export function YearHeatmap(props: Props) {
                     textAnchor="middle"
                     dominantBaseline="middle"
                     className="fill-[var(--muted)]"
-                    style={{ fontSize: 11 }}
+                    style={{ fontSize: quarter ? 10 : 11 }}
                   >
                     {m.label}
                   </text>
@@ -255,7 +266,10 @@ export function YearHeatmap(props: Props) {
               />
             </svg>
             ) : (
-              <div className="flex h-[560px] max-h-[80vh] items-center justify-center text-[var(--muted)]">
+              <div
+                className="flex items-center justify-center text-[var(--muted)]"
+                style={{ height: geo.size, maxHeight: "70vh" }}
+              >
                 <Loader2 className="h-6 w-6 animate-spin" />
               </div>
             )}

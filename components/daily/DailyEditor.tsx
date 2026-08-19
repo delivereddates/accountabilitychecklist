@@ -16,6 +16,7 @@ import { percentColor } from "@/lib/colors";
 import type { DashboardData } from "@/lib/use-dashboard";
 import { useMutations } from "@/lib/swr-mutations";
 import { ThreeWayToggle } from "./ThreeWayToggle";
+import { StatusGlyph } from "@/components/summary/StatusGlyph";
 import { DateStepper } from "@/components/summary/DateStepper";
 
 type Mutations = ReturnType<typeof useMutations>;
@@ -24,9 +25,16 @@ interface Props {
   data: DashboardData;
   mutations: Mutations;
   selectedDate: string;
+  /** Session user — their card sorts first and is the only editable one. */
+  currentUserId: string;
 }
 
-export function DailyEditor({ data, mutations, selectedDate }: Props) {
+export function DailyEditor({
+  data,
+  mutations,
+  selectedDate,
+  currentUserId,
+}: Props) {
   const [date, setDate] = useState(selectedDate);
   const [error, setError] = useState<string | null>(null);
 
@@ -83,15 +91,6 @@ export function DailyEditor({ data, mutations, selectedDate }: Props) {
     if (!window.confirm("Delete this task and all of its history?")) return;
     mutations.deleteTask(taskId).catch(() => setError("Couldn’t delete."));
   }
-  function handleDeleteUser(userId: string, name: string) {
-    if (
-      !window.confirm(
-        `Delete ${name} and ALL their tasks and history? This cannot be undone.`,
-      )
-    )
-      return;
-    mutations.deleteUser(userId).catch(() => setError("Couldn’t delete user."));
-  }
 
   function shift(days: number) {
     setDate(toISODate(addDays(parseISO(date), days)));
@@ -122,10 +121,11 @@ export function DailyEditor({ data, mutations, selectedDate }: Props) {
         <EmptyState />
       ) : (
         <div className="grid gap-4">
-          {users.map((u) => (
+          {orderedUsers(users, currentUserId).map((u) => (
             <UserCard
               key={u.id}
               user={u}
+              own={u.id === currentUserId}
               tasks={tasks.filter((t) => t.user_id === u.id)}
               selectedDate={date}
               statusOf={statusOf}
@@ -136,7 +136,6 @@ export function DailyEditor({ data, mutations, selectedDate }: Props) {
               onSetNote={handleSetNote}
               onDeleteTask={handleDeleteTask}
               onAddTask={(title) => handleAddTask(u.id, title)}
-              onDeleteUser={() => handleDeleteUser(u.id, u.name)}
             />
           ))}
         </div>
@@ -156,8 +155,17 @@ function shortDateLabel(iso: string): string {
   return format(d, "EEE");
 }
 
+/** Session user's card first; everyone else keeps their usual order. */
+function orderedUsers(users: User[], currentUserId: string): User[] {
+  return [...users].sort((a, b) => {
+    const own = (u: User) => (u.id === currentUserId ? 0 : 1);
+    return own(a) - own(b);
+  });
+}
+
 function UserCard({
   user,
+  own,
   tasks,
   selectedDate,
   statusOf,
@@ -168,9 +176,10 @@ function UserCard({
   onSetNote,
   onDeleteTask,
   onAddTask,
-  onDeleteUser,
 }: {
   user: User;
+  /** True when this card is the logged-in user — only then are tasks editable. */
+  own: boolean;
   tasks: Task[];
   selectedDate: string;
   statusOf: (dateISO: string, taskId: string) => CompletionStatus | undefined;
@@ -185,7 +194,6 @@ function UserCard({
   onSetNote: (taskId: string, dateISO: string, note: string) => void;
   onDeleteTask: (taskId: string) => void;
   onAddTask: (title: string) => Promise<boolean>;
-  onDeleteUser: () => void;
 }) {
   const s = score();
   const pct = s.percent == null ? null : Math.round(s.percent * 100);
@@ -193,17 +201,14 @@ function UserCard({
   return (
     <section className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-sm">
       <header className="mb-2 flex items-center justify-between gap-2">
-        <div className="flex items-center gap-1">
-          <h2 className="text-base font-semibold">{user.name}</h2>
-          <button
-            onClick={onDeleteUser}
-            title={`Delete ${user.name}`}
-            aria-label={`Delete ${user.name}`}
-            className="rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--color-nocheck)] hover:opacity-100"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
-        </div>
+        <h2 className="text-base font-semibold">
+          {user.name}
+          {!own && (
+            <span className="ml-1.5 align-middle text-[10px] font-medium uppercase tracking-wide text-[var(--muted)]">
+              read-only
+            </span>
+          )}
+        </h2>
         <MiniScore label={shortDateLabel(selectedDate)} score={s} pct={pct} />
       </header>
 
@@ -217,6 +222,7 @@ function UserCard({
             <TaskRow
               key={task.id}
               task={task}
+              editable={own}
               selectedDate={selectedDate}
               status={statusOf(selectedDate, task.id)}
               note={noteFor(task.id, selectedDate)}
@@ -229,7 +235,7 @@ function UserCard({
         </ul>
       )}
 
-      <AddTaskForm onAdd={onAddTask} />
+      {own && <AddTaskForm onAdd={onAddTask} />}
     </section>
   );
 }
@@ -260,6 +266,7 @@ function MiniScore({
 
 function TaskRow({
   task,
+  editable,
   selectedDate,
   status,
   note,
@@ -269,6 +276,7 @@ function TaskRow({
   onDelete,
 }: {
   task: Task;
+  editable: boolean;
   selectedDate: string;
   status: CompletionStatus | undefined;
   note: string;
@@ -289,7 +297,10 @@ function TaskRow({
     <li className="flex flex-col gap-1 border-t border-[var(--border)] py-2.5 first:border-t-0">
       <div className="flex items-center gap-2">
         <div className="flex min-w-0 flex-1 items-center gap-1">
-          <TaskTitle title={task.title} onRename={(t) => onRename(task.id, t)} />
+          {editable && (
+            <TaskTitle title={task.title} onRename={(t) => onRename(task.id, t)} />
+          )}
+          {!editable && <span className="truncate text-sm">{task.title}</span>}
           <button
             onClick={() => setShowNotes((v) => !v)}
             className={
@@ -302,21 +313,27 @@ function TaskRow({
           >
             Notes{hasNotes ? " •" : ""}
           </button>
-          <button
-            onClick={() => onDelete(task.id)}
-            className="shrink-0 rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--color-nocheck)] hover:opacity-100"
-            aria-label="Delete task"
-            title="Delete task"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-          </button>
+          {editable && (
+            <button
+              onClick={() => onDelete(task.id)}
+              className="shrink-0 rounded p-1 text-[var(--muted)] opacity-50 transition hover:text-[var(--color-nocheck)] hover:opacity-100"
+              aria-label="Delete task"
+              title="Delete task"
+            >
+              <Trash2 className="h-3.5 w-3.5" />
+            </button>
+          )}
         </div>
         {active ? (
-          <ThreeWayToggle
-            value={status ?? null}
-            onChange={(s) => onSetStatus(selectedDate, task.id, s)}
-            size="sm"
-          />
+          editable ? (
+            <ThreeWayToggle
+              value={status ?? null}
+              onChange={(s) => onSetStatus(selectedDate, task.id, s)}
+              size="sm"
+            />
+          ) : (
+            <StatusGlyph status={status} className="h-4 w-4 shrink-0" />
+          )
         ) : (
           <span className="shrink-0 pr-2 text-xs text-[var(--muted)] opacity-40">
             —
@@ -327,6 +344,7 @@ function TaskRow({
         <TaskNotes
           key={`${task.id}|${selectedDate}`}
           note={note}
+          readOnly={!editable}
           onSave={(v) => onSetNote(task.id, selectedDate, v)}
         />
       )}
@@ -336,18 +354,21 @@ function TaskRow({
 
 function TaskNotes({
   note,
+  readOnly,
   onSave,
 }: {
   note: string;
+  readOnly: boolean;
   onSave: (v: string) => void;
 }) {
   const [v, setV] = useState(note);
   return (
     <textarea
       value={v}
+      readOnly={readOnly}
       onChange={(e) => setV(e.target.value)}
       onBlur={() => {
-        if (v !== note) onSave(v);
+        if (!readOnly && v !== note) onSave(v);
       }}
       placeholder="Notes for this day…"
       rows={2}

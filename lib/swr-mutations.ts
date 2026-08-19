@@ -1,8 +1,6 @@
 "use client";
 
-import { useSWRConfig } from "swr";
 import { useDashboard, type DashboardData } from "./use-dashboard";
-import { buildCompletionIndex, getStatus, tasksActiveOnDate } from "./scoring";
 import type { CompletionStatus, Task, TaskCompletion, TaskNote } from "./types";
 
 const EMPTY: DashboardData = {
@@ -156,12 +154,7 @@ function redirectOn401() {
 
 export function useMutations() {
   const { mutate } = useDashboard();
-  const { cache } = useSWRConfig();
   boundMutate = () => mutate();
-
-  /** Read the latest cache synchronously (so rapid clicks see prior clicks). */
-  const latest = (): DashboardData =>
-    (cache.get("/api/dashboard")?.data as DashboardData | undefined) ?? EMPTY;
 
   const applyWrites = (writes: PendingWrite[]) => {
     mutate(
@@ -186,28 +179,11 @@ export function useMutations() {
   };
 
   const setCompletion = (taskId: string, date: string, status: CompletionStatus) => {
-    const cur = latest();
     const writes: PendingWrite[] = [
       { kind: "status", taskId, date, status },
     ];
-    // Client-side backfill on check: mark this user's other still-unset active
-    // tasks as no_check. Computed from the latest cache, so a task you already
-    // checked is never overwritten. (Server just stores what we send.)
-    if (status === "check") {
-      const task = cur.tasks.find((t) => t.id === taskId);
-      if (task) {
-        const idx = buildCompletionIndex(cur.completions);
-        const active = tasksActiveOnDate(
-          cur.tasks.filter((t) => t.user_id === task.user_id),
-          date,
-        );
-        for (const s of active) {
-          if (s.id !== taskId && getStatus(idx, s.id, date) === undefined) {
-            writes.push({ kind: "status", taskId: s.id, date, status: "no_check" });
-          }
-        }
-      }
-    }
+    // No backfill: blanks are never written. scoreFromStatuses counts a
+    // user's blanks as missed (for averages) once they've graded the day.
     applyWrites(writes);
     for (const w of writes) pending.set(keyOf(w.taskId, w.date), w);
     scheduleFlush();
@@ -312,21 +288,6 @@ export function useMutations() {
       },
     );
 
-  const deleteUser = (userId: string) =>
-    mutate(
-      async (cur) => {
-        const res = await fetchRetry(`/api/users/${userId}`, { method: "DELETE" });
-        if (!res.ok) throw new Error("delete user failed");
-        return pruneUser(cur, userId);
-      },
-      {
-        optimisticData: (cur) => pruneUser(cur, userId),
-        rollbackOnError: true,
-        populateCache: false,
-        revalidate: false,
-      },
-    );
-
   return {
     setCompletion,
     clearCompletion,
@@ -334,7 +295,6 @@ export function useMutations() {
     updateTask,
     setTaskNote,
     deleteTask,
-    deleteUser,
   };
 }
 
@@ -368,20 +328,6 @@ function removeCompletion(
     completions: base.completions.filter(
       (c) => !(c.task_id === taskId && c.date === date),
     ),
-  };
-}
-
-function pruneUser(cur: DashboardData | undefined, userId: string): DashboardData {
-  const base = cur ?? EMPTY;
-  const taskIds = new Set(
-    base.tasks.filter((t) => t.user_id === userId).map((t) => t.id),
-  );
-  return {
-    ...base,
-    users: base.users.filter((u) => u.id !== userId),
-    tasks: base.tasks.filter((t) => t.user_id !== userId),
-    completions: base.completions.filter((c) => !taskIds.has(c.task_id)),
-    notes: base.notes.filter((n) => !taskIds.has(n.task_id)),
   };
 }
 

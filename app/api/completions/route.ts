@@ -1,10 +1,34 @@
 import { NextResponse, type NextRequest } from "next/server";
-import { clearCompletion, setCompletion } from "@/lib/db";
+import { clearCompletion, getTaskById, setCompletion } from "@/lib/db";
+import { requireUser } from "@/lib/auth";
 import { jsonError } from "@/lib/api-helpers";
 import type { CompletionStatus } from "@/lib/types";
 
 const VALID_STATUSES: CompletionStatus[] = ["check", "no_check", "exempt"];
 const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Load the task and confirm the session user owns it, else respond. */
+async function guard(
+  req: NextRequest,
+  taskId: string,
+): Promise<{ ok: true } | { ok: false; res: NextResponse }> {
+  const user = await requireUser(req);
+  if (!user) {
+    return {
+      ok: false,
+      res: NextResponse.json({ error: "Not authenticated." }, { status: 401 }),
+    };
+  }
+  const task = await getTaskById(taskId);
+  if (!task || task.user_id !== user.userId) {
+    // 404 (not 403) so other users' task ids aren't enumerable.
+    return {
+      ok: false,
+      res: NextResponse.json({ error: "Task not found." }, { status: 404 }),
+    };
+  }
+  return { ok: true };
+}
 
 /** Upsert a task's status for a date. Called on every 3-way toggle (debounced). */
 export async function POST(req: NextRequest) {
@@ -29,9 +53,11 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  const g = await guard(req, task_id);
+  if (!g.ok) return g.res;
+
   try {
-    // The client is the source of truth; it computes any "backfill" itself and
-    // sends each row individually. The server just stores what it's told.
+    // The client is the source of truth; blanks are simply never sent.
     const completion = await setCompletion(task_id, date, status);
     return NextResponse.json({ completion });
   } catch (e) {
@@ -57,6 +83,9 @@ export async function DELETE(req: NextRequest) {
       { status: 400 },
     );
   }
+
+  const g = await guard(req, taskId);
+  if (!g.ok) return g.res;
 
   try {
     await clearCompletion(taskId, date);

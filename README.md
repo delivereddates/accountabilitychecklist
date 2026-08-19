@@ -77,16 +77,26 @@ account from `APP_USERS`.
 - **`push_subscriptions`** — one row per device/browser (Web Push).
 - **`push_log`** — dedupe table so each reminder fires exactly once.
 
-### Scoring (exempt never counts against you)
+### Scoring (blanks stay blank; averages count them as missed)
 
-Handled centrally in [`lib/scoring.ts`](lib/scoring.ts):
+Handled centrally in [`lib/scoring.ts`](lib/scoring.ts). A missing row is
+**never written over** — the 3-way toggle only ever sets what you clicked:
 
-```
-denominator = total_tasks − exempt_tasks
-percent     = checked_tasks / denominator   (null if denominator is 0 → "no data")
-```
+- An untouched day (or exempt-only) is **no data** (—).
+- Once a user has graded *anything* on a day (a check or an explicit miss),
+  their remaining blanks **count as missed in averages only**. Per user, per
+  day.
+- Exempt is always excluded from the denominator.
 
-So "3 checked, 1 exempt, of 4" = 3/3 = **100%**.
+So "1 checked, 1 blank, 1 exempt" = 1/2 = **50%**; "all blank" = **—**.
+
+### Ownership
+
+Each user can only mutate **their own** tasks, completions, and notes (enforced
+server-side in every mutation route — other users' task ids return 404). On the
+Daily page your card sorts first and is the only editable one; everyone else is
+read-only (status glyph instead of the toggle). Users are never deleted
+in-app — accounts live entirely in `APP_USERS`.
 
 ### Push notifications
 
@@ -116,7 +126,7 @@ in their own timezone — the browser reports it automatically). Delivery:
 | Route | Purpose |
 | --- | --- |
 | `/login` | Per-account sign-in. |
-| `/` (Daily) | Edit any day; 3-way toggles; notes; add/rename/delete tasks. |
+| `/` (Daily) | Edit any day; 3-way toggles; notes; add/rename/delete **your** tasks (others read-only, your card first). |
 | `/week` | Task × 7-day matrix (`?mode=rolling` last-7 vs `calendar` Mon–Sun). |
 | `/month` | Calendar density grid with per-user dots (`rolling` 30 vs calendar month). |
 | `/year` | Concentric-rings SVG heatmap (`Q` toggles a quarter-quadrant view). |
@@ -152,9 +162,10 @@ npm run lint    # eslint
 
 - **Add a person:** append `{username, password, name}` to `APP_USERS` in
   Vercel → redeploy → they log in and their user row appears automatically.
-- **Change a password / remove access:** edit `APP_USERS` → redeploy. (To
-  fully remove someone's data, also delete their user on the Daily page,
-  which cascades to tasks/history/settings/subscriptions.)
+- **Change a password / remove access:** edit `APP_USERS` → redeploy. There is
+  no in-app user deletion — accounts and their rows are managed entirely via
+  the env var (to purge someone's historical data, delete their `users` row in
+  Supabase; the FK cascades).
 
 ## Security notes
 

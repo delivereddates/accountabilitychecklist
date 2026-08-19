@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 
@@ -11,6 +11,17 @@ const geistMono = Geist_Mono({
   variable: "--font-geist-mono",
   subsets: ["latin"],
 });
+
+// Viewport lives in its own export in this Next version (metadata.viewport
+// triggers a build warning). maximumScale/userScalable lock out pinch zoom;
+// the gesturestart preventDefault below covers iOS Safari, which ignores
+// user-scalable=no.
+export const viewport: Viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+};
 
 export const metadata: Metadata = {
   title: "Accountability Checklist",
@@ -36,6 +47,13 @@ export default function RootLayout({
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <body className="min-h-full flex flex-col">{children}</body>
+      {/* Block iOS Safari pinch zoom (it ignores user-scalable=no). */}
+      <script
+        dangerouslySetInnerHTML={{
+          __html:
+            "document.addEventListener('gesturestart', function (e) { e.preventDefault(); });",
+        }}
+      />
     </html>
   );
 }
