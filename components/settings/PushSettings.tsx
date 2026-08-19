@@ -55,8 +55,11 @@ export function PushSettings({
     try {
       await unsubscribeFromPush();
       await onChanged();
+      setMessage(
+        "Unsubscribed from all devices. Enable notifications again on each device you want them on.",
+      );
     } catch {
-      setMessage("Couldn't disable notifications.");
+      setMessage("Couldn't unsubscribe.");
     } finally {
       setBusy(false);
     }
@@ -71,7 +74,7 @@ export function PushSettings({
     if (!res.ok) {
       setMessage(data?.error || "Couldn't send the test notification.");
     } else if (data.sent === 0) {
-      setMessage("Sent — but no devices are subscribed on your account.");
+      setMessage("No devices could be reached — try unsubscribing and re-enabling.");
     } else {
       setMessage("Test sent — check your notifications.");
     }
@@ -112,7 +115,7 @@ export function PushSettings({
             className="inline-flex items-center gap-1.5 rounded-lg bg-[var(--color-check)] px-3 py-2 text-sm font-semibold text-white disabled:opacity-50"
           >
             <BellRing className="h-4 w-4" />
-            {busy ? "Working…" : "Enable notifications"}
+            {busy ? "Enabling…" : "Enable notifications"}
           </button>
         ) : (
           <>
@@ -128,9 +131,11 @@ export function PushSettings({
               type="button"
               onClick={handleUnsubscribe}
               disabled={busy}
+              title="Remove this account's subscriptions on every device"
               className="inline-flex items-center gap-1.5 rounded-lg border border-[var(--border)] px-3 py-2 text-sm font-medium hover:bg-black/5 disabled:opacity-50"
             >
-              <BellOff className="h-4 w-4" /> Disable
+              <BellOff className="h-4 w-4" />
+              {busy ? "Unsubscribing…" : "Unsubscribe"}
             </button>
           </>
         )}

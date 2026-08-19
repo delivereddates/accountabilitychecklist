@@ -137,7 +137,7 @@ in their own timezone — the browser reports it automatically). Delivery:
 | `/week` | Task × 7-day matrix (`?mode=rolling` last-7 vs `calendar` Mon–Sun). |
 | `/month` | Calendar density grid with per-user dots (`rolling` 30 vs calendar month). |
 | `/year` | Concentric-rings SVG heatmap (`Q` toggles a quarter-quadrant view). |
-| `/settings` | Notification toggles + enable/disable/test push on this device. |
+| `/settings` | Notification toggles + subscribe/unsubscribe-all/test push. |
 
 All summary pages support `?date=YYYY-MM-DD` (and `?mode=`) deep-links.
 

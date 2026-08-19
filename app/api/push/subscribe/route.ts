@@ -1,6 +1,7 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { requireUser } from "@/lib/auth";
 import {
+  deleteAllPushSubscriptions,
   deletePushSubscription,
   upsertPushSubscription,
 } from "@/lib/db";
@@ -40,11 +41,21 @@ export async function DELETE(req: NextRequest) {
     return NextResponse.json({ error: "Not authenticated." }, { status: 401 });
   }
   const body = await req.json().catch(() => ({}));
-  const endpoint = typeof body?.endpoint === "string" ? body.endpoint : "";
-  if (!endpoint) {
-    return NextResponse.json({ error: "endpoint is required." }, { status: 400 });
-  }
   try {
+    if (body?.all === true) {
+      // Remove every row on the account — the recovery path for devices that
+      // were destroyed without unsubscribing (e.g. home-screen install
+      // deleted): their endpoints are unreachable from the new install.
+      await deleteAllPushSubscriptions(user.userId);
+      return NextResponse.json({ ok: true });
+    }
+    const endpoint = typeof body?.endpoint === "string" ? body.endpoint : "";
+    if (!endpoint) {
+      return NextResponse.json(
+        { error: "endpoint or all:true is required." },
+        { status: 400 },
+      );
+    }
     await deletePushSubscription(endpoint, user.userId);
     return NextResponse.json({ ok: true });
   } catch {

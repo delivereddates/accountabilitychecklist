@@ -415,6 +415,18 @@ export async function deletePushSubscription(
   if (error) throw error;
 }
 
+/** Remove EVERY subscription row on the account (the "Unsubscribe" button —
+ * also clears orphans left by devices destroyed without unsubscribing). */
+export async function deleteAllPushSubscriptions(
+  userId: string,
+): Promise<void> {
+  const { error } = await admin()
+    .from("push_subscriptions")
+    .delete()
+    .eq("user_id", userId);
+  if (error) throw error;
+}
+
 export async function deletePushSubscriptionByEndpoint(
   endpoint: string,
 ): Promise<void> {

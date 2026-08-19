@@ -42,18 +42,36 @@ export async function subscribeToPush(): Promise<void> {
   }
 }
 
-/** Unsubscribe from the push service AND remove the server-side row. */
+/** Unsubscribe this device AND remove every server-side subscription row on
+ * the account. Safe to call with no service worker at all (e.g. the app was
+ * deleted from the home screen and re-added) — uses getRegistration() rather
+ * than serviceWorker.ready, which never resolves without a registration. */
 export async function unsubscribeFromPush(): Promise<void> {
-  const reg = await navigator.serviceWorker.ready;
-  const sub = await reg.pushManager.getSubscription();
-  if (!sub) return;
-  const j = sub.toJSON();
-  await fetch("/api/push/subscribe", {
+  // Local browser push (if any registration exists here).
+  try {
+    const reg = await navigator.serviceWorker?.getRegistration();
+    const sub = reg ? await reg.pushManager.getSubscription() : null;
+    if (sub) {
+      const j = sub.toJSON();
+      await fetch("/api/push/subscribe", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ endpoint: j.endpoint }),
+      }).catch(() => {});
+      await sub.unsubscribe().catch(() => {});
+    }
+  } catch {
+    // No service worker (fresh install / unsupported) — nothing local to do.
+  }
+
+  // Wipe every row for this account, including ones from devices that no
+  // longer exist (deleted home-screen installs leave orphans behind).
+  const res = await fetch("/api/push/subscribe", {
     method: "DELETE",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ endpoint: j.endpoint }),
+    body: JSON.stringify({ all: true }),
   });
-  await sub.unsubscribe();
+  if (!res.ok) throw new Error("Couldn't unsubscribe.");
 }
 
 export function isIOS(): boolean {
