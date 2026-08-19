@@ -59,8 +59,13 @@ account from `APP_USERS`.
 - Accounts live in **`APP_USERS`** (admin-managed — edit it in Vercel →
   Settings → Environment Variables, then redeploy). Adding or changing a
   password is a config change; there is no in-app account management.
-- On first login, the account's `name` row is created in the `users` table
-  automatically.
+- **The user list mirrors `APP_USERS` exactly.** On every successful login the
+  server reconciles the `users` table with the env var: new accounts get rows,
+  and rows whose name has no account are **deleted** (tasks, history, settings,
+  and push subscriptions cascade away). Removing an account from `APP_USERS`
+  and someone logging in *is* the deletion path — the removed person's next
+  login attempt is rejected, and their data disappears at the next login by
+  anyone else.
 - [`middleware.ts`](middleware.ts) gates every route (API routes get `401`
   JSON; pages redirect to `/login`) except `/login`, `/api/login`,
   `/api/logout`, and `/api/cron/*` (which authenticates with `CRON_SECRET`).
@@ -162,10 +167,9 @@ npm run lint    # eslint
 
 - **Add a person:** append `{username, password, name}` to `APP_USERS` in
   Vercel → redeploy → they log in and their user row appears automatically.
-- **Change a password / remove access:** edit `APP_USERS` → redeploy. There is
-  no in-app user deletion — accounts and their rows are managed entirely via
-  the env var (to purge someone's historical data, delete their `users` row in
-  Supabase; the FK cascades).
+- **Remove a person:** delete their entry from `APP_USERS` → redeploy. Their
+  user row (and all their data — the FK cascades) is deleted the next time
+  *anyone* logs in, since the table always mirrors the env var exactly.
 
 ## Security notes
 

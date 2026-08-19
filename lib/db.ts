@@ -152,6 +152,37 @@ export async function getUserByName(name: string): Promise<User | null> {
   return (data as User) ?? null;
 }
 
+/**
+ * Make the users table mirror APP_USERS exactly: create a row for every
+ * account name, delete rows whose name has no account (tasks, history,
+ * settings, and subscriptions cascade away). Called on each successful login
+ * — editing the env var is THE way users are added and removed. An empty
+ * name list is treated as a misconfiguration, never as "delete everyone".
+ */
+export async function syncUsersWithAccounts(names: string[]): Promise<void> {
+  const wanted = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
+  if (wanted.length === 0) return;
+  const rows = await getUsers();
+  const orphanIds = rows
+    .filter((r) => !wanted.includes(r.name))
+    .map((r) => r.id);
+  const missing = wanted.filter((n) => !rows.some((r) => r.name === n));
+  const ops: Promise<unknown>[] = [];
+  if (orphanIds.length > 0) {
+    ops.push(
+      admin()
+        .from("users")
+        .delete()
+        .in("id", orphanIds)
+        .then(({ error }) => {
+          if (error) throw error;
+        }) as Promise<void>,
+    );
+  }
+  for (const name of missing) ops.push(getOrCreateUserByName(name));
+  await Promise.all(ops);
+}
+
 export async function createTask(userId: string, title: string): Promise<Task> {
   const { data, error } = await admin()
     .from("tasks")
