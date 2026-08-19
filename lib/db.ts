@@ -169,22 +169,48 @@ export async function getUserByName(name: string): Promise<User | null> {
 }
 
 /**
- * Users visible to the app: rows whose name matches an APP_USERS account.
- * Rows for deprovisioned accounts are NOT deleted — they're simply filtered
- * out here (deleting a user and their history is a manual SQL operation by
- * the admin). Falls back to all rows when APP_USERS can't be read, so a
- * config error hides data rather than serving the wrong list.
+ * Users visible to the app: one row per APP_USERS account, in configured
+ * order. A missing row is provisioned here (same auto-create login does),
+ * so a newly added person shows up immediately with a blank slate — and
+ * rows are never deleted: removing an account simply drops them from this
+ * list (permanent deletion is a manual SQL operation by the admin). Falls
+ * back to all rows when APP_USERS can't be read, so a config error hides
+ * data rather than serving the wrong list.
  */
 export async function getConfiguredUsers(): Promise<User[]> {
   let names: string[] | null = null;
   try {
-    names = getAppUsers().map((a) => a.name.trim());
+    // Dedupe by trimmed name, preserving APP_USERS order; skip blanks.
+    names = [
+      ...new Set(
+        getAppUsers()
+          .map((a) => a.name.trim())
+          .filter(Boolean),
+      ),
+    ];
   } catch {
     names = null;
   }
   const rows = await getUsers();
   if (!names || names.length === 0) return rows;
-  return rows.filter((r) => names!.includes(r.name));
+
+  const byName = new Map(rows.map((r) => [r.name, r]));
+  const users: User[] = [];
+  for (const n of names) {
+    const existing = byName.get(n);
+    if (existing) {
+      users.push(existing);
+    } else {
+      // Provision the row (idempotent, race-safe). A transient failure skips
+      // the person for this read rather than blanking the whole page.
+      try {
+        users.push(await getOrCreateUserByName(n));
+      } catch {
+        // ignore — retried on the next read
+      }
+    }
+  }
+  return users;
 }
 
 export async function createTask(userId: string, title: string): Promise<Task> {

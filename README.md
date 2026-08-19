@@ -59,11 +59,14 @@ account from `APP_USERS`.
 - Accounts live in **`APP_USERS`** (admin-managed — edit it in Vercel →
   Settings → Environment Variables, then redeploy). Adding or changing a
   password is a config change; there is no in-app account management.
-- **Reads are filtered to `APP_USERS`**: only rows whose name matches a
-  configured account are shown anywhere (dashboard, summaries, user list).
-  Removing an account hides their data everywhere, but **deletes nothing** —
-  the rows stay in Supabase. To permanently delete a user and their details,
-  run a manual SQL delete (the FKs cascade), e.g. in the Supabase SQL editor:
+- **Reads are filtered to `APP_USERS`**: only accounts present in the env
+  var are shown anywhere (dashboard, summaries, user list) — one row per
+  account, provisioned automatically if missing, in configured order. A
+  person with no tasks yet shows a blank slate (and can add tasks when
+  logged in as the matching account). Removing an account hides their data
+  everywhere but **deletes nothing** — the rows stay in Supabase. To
+  permanently delete a user and their details, run a manual SQL delete (the
+  FKs cascade), e.g. in the Supabase SQL editor:
   `delete from users where name = 'Anna';`
 - [`middleware.ts`](middleware.ts) gates every route (API routes get `401`
   JSON; pages redirect to `/login`) except `/login`, `/api/login`,
@@ -165,7 +168,8 @@ npm run lint    # eslint
 ### Managing accounts
 
 - **Add a person:** append `{username, password, name}` to `APP_USERS` in
-  Vercel → redeploy → they log in and their user row appears automatically.
+  Vercel → redeploy. Their card appears immediately (the row is provisioned
+  on first read) with a blank slate; they add their own tasks when logged in.
 - **Remove a person:** delete their entry from `APP_USERS` → redeploy. Their
   data is hidden from the app immediately (reads filter to configured
   accounts) but **kept in the database**. To purge it, run a manual SQL delete

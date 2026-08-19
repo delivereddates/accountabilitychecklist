@@ -475,7 +475,7 @@ function EmptyState() {
         <h2 className="text-base font-semibold">No users yet</h2>
         <p className="text-sm text-[var(--muted)]">
           Accounts are configured by the administrator — each person appears
-          here automatically after their first login.
+          here automatically once their account is configured.
         </p>
       </div>
     </div>
