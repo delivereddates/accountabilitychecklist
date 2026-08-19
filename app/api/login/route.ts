@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { getIronSession } from "iron-session";
 import { sessionOptions, type SessionData } from "@/lib/session";
-import { findAppUser, getAppUsers, AppUsersError } from "@/lib/app-users";
-import { getOrCreateUserByName, syncUsersWithAccounts } from "@/lib/db";
+import { findAppUser, AppUsersError } from "@/lib/app-users";
+import { getOrCreateUserByName } from "@/lib/db";
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({}));
@@ -35,9 +35,6 @@ export async function POST(req: NextRequest) {
 
   let user;
   try {
-    // Reconcile the users table with APP_USERS first (creates rows for new
-    // accounts, deletes rows for removed ones), then load this account's row.
-    await syncUsersWithAccounts(getAppUsers().map((a) => a.name));
     user = await getOrCreateUserByName(account.name);
   } catch {
     return NextResponse.json(

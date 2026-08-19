@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { getUsers } from "@/lib/db";
+import { getConfiguredUsers } from "@/lib/db";
 
 export async function GET() {
-  const users = await getUsers();
+  const users = await getConfiguredUsers();
   return NextResponse.json({ users });
 }

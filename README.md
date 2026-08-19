@@ -59,13 +59,12 @@ account from `APP_USERS`.
 - Accounts live in **`APP_USERS`** (admin-managed — edit it in Vercel →
   Settings → Environment Variables, then redeploy). Adding or changing a
   password is a config change; there is no in-app account management.
-- **The user list mirrors `APP_USERS` exactly.** On every successful login the
-  server reconciles the `users` table with the env var: new accounts get rows,
-  and rows whose name has no account are **deleted** (tasks, history, settings,
-  and push subscriptions cascade away). Removing an account from `APP_USERS`
-  and someone logging in *is* the deletion path — the removed person's next
-  login attempt is rejected, and their data disappears at the next login by
-  anyone else.
+- **Reads are filtered to `APP_USERS`**: only rows whose name matches a
+  configured account are shown anywhere (dashboard, summaries, user list).
+  Removing an account hides their data everywhere, but **deletes nothing** —
+  the rows stay in Supabase. To permanently delete a user and their details,
+  run a manual SQL delete (the FKs cascade), e.g. in the Supabase SQL editor:
+  `delete from users where name = 'Anna';`
 - [`middleware.ts`](middleware.ts) gates every route (API routes get `401`
   JSON; pages redirect to `/login`) except `/login`, `/api/login`,
   `/api/logout`, and `/api/cron/*` (which authenticates with `CRON_SECRET`).
@@ -168,8 +167,10 @@ npm run lint    # eslint
 - **Add a person:** append `{username, password, name}` to `APP_USERS` in
   Vercel → redeploy → they log in and their user row appears automatically.
 - **Remove a person:** delete their entry from `APP_USERS` → redeploy. Their
-  user row (and all their data — the FK cascades) is deleted the next time
-  *anyone* logs in, since the table always mirrors the env var exactly.
+  data is hidden from the app immediately (reads filter to configured
+  accounts) but **kept in the database**. To purge it, run a manual SQL delete
+  in the Supabase SQL editor (`delete from users where name = '…';` — tasks,
+  history, settings, and subscriptions cascade).
 
 ## Security notes
 

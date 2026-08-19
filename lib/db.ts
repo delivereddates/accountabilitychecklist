@@ -1,5 +1,6 @@
 import "server-only";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { getAppUsers } from "./app-users";
 import type {
   CompletionStatus,
   PushSubscriptionRow,
@@ -54,6 +55,17 @@ export async function getTasks(): Promise<Task[]> {
   return (data ?? []) as Task[];
 }
 
+/**
+ * Tasks belonging to APP_USERS accounts only (joined via the configured user
+ * list). Tasks of hidden users stay in the DB, untouched.
+ */
+export async function getConfiguredTasks(): Promise<Task[]> {
+  const users = await getConfiguredUsers();
+  const ids = new Set(users.map((u) => u.id));
+  const tasks = await getTasks();
+  return tasks.filter((t) => ids.has(t.user_id));
+}
+
 export async function getTaskNotes(): Promise<TaskNote[]> {
   const { data, error } = await admin()
     .from("task_notes")
@@ -87,18 +99,22 @@ export async function getAllCompletions(): Promise<TaskCompletion[]> {
 /** Everything a summary page needs for a [from, to] date range, in parallel. */
 export async function getDashboardData(fromISO: string, toISO: string) {
   const [users, tasks, completions] = await Promise.all([
-    getUsers(),
-    getTasks(),
+    getConfiguredUsers(),
+    getConfiguredTasks(),
     getCompletions(fromISO, toISO),
   ]);
   return { users, tasks, completions };
 }
 
-/** Full dataset (all users, tasks, notes, and completion history) for the client cache. */
+/**
+ * Full dataset for the client cache — APP_USERS accounts only. Completions
+ * and notes of hidden users are filtered client-side-invisible: they'd key
+ * to task ids that no longer appear, so they simply never match.
+ */
 export async function getDashboardAll() {
   const [users, tasks, completions, notes] = await Promise.all([
-    getUsers(),
-    getTasks(),
+    getConfiguredUsers(),
+    getConfiguredTasks(),
     getAllCompletions(),
     getTaskNotes(),
   ]);
@@ -153,34 +169,22 @@ export async function getUserByName(name: string): Promise<User | null> {
 }
 
 /**
- * Make the users table mirror APP_USERS exactly: create a row for every
- * account name, delete rows whose name has no account (tasks, history,
- * settings, and subscriptions cascade away). Called on each successful login
- * — editing the env var is THE way users are added and removed. An empty
- * name list is treated as a misconfiguration, never as "delete everyone".
+ * Users visible to the app: rows whose name matches an APP_USERS account.
+ * Rows for deprovisioned accounts are NOT deleted — they're simply filtered
+ * out here (deleting a user and their history is a manual SQL operation by
+ * the admin). Falls back to all rows when APP_USERS can't be read, so a
+ * config error hides data rather than serving the wrong list.
  */
-export async function syncUsersWithAccounts(names: string[]): Promise<void> {
-  const wanted = [...new Set(names.map((n) => n.trim()).filter(Boolean))];
-  if (wanted.length === 0) return;
-  const rows = await getUsers();
-  const orphanIds = rows
-    .filter((r) => !wanted.includes(r.name))
-    .map((r) => r.id);
-  const missing = wanted.filter((n) => !rows.some((r) => r.name === n));
-  const ops: Promise<unknown>[] = [];
-  if (orphanIds.length > 0) {
-    ops.push(
-      admin()
-        .from("users")
-        .delete()
-        .in("id", orphanIds)
-        .then(({ error }) => {
-          if (error) throw error;
-        }) as Promise<void>,
-    );
+export async function getConfiguredUsers(): Promise<User[]> {
+  let names: string[] | null = null;
+  try {
+    names = getAppUsers().map((a) => a.name.trim());
+  } catch {
+    names = null;
   }
-  for (const name of missing) ops.push(getOrCreateUserByName(name));
-  await Promise.all(ops);
+  const rows = await getUsers();
+  if (!names || names.length === 0) return rows;
+  return rows.filter((r) => names!.includes(r.name));
 }
 
 export async function createTask(userId: string, title: string): Promise<Task> {
