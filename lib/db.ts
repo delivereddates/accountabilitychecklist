@@ -10,6 +10,7 @@ import type {
   User,
   UserSettings,
 } from "./types";
+import type { SyncChanges, SyncPullResponse } from "./local/types";
 
 let _client: SupabaseClient | null = null;
 
@@ -482,4 +483,133 @@ export async function deletePushLogOlderThanDays(days: number): Promise<void> {
     .delete()
     .lt("date", cutoff);
   if (error) throw error;
+}
+
+// ---------------------------------------------------------------------------
+// Local-first sync (productivity sections: todos / calendar / notes)
+//
+// These tables mirror lib/local/types.ts records. Upserts are last-write-wins
+// per row (strictly newer client updated_at wins), enforced inside the
+// sync_push_records RPC because supabase-js upsert() cannot express a
+// conditional update.
+// ---------------------------------------------------------------------------
+
+/** Apply one push batch via the LWW RPC (see supabase/local-first.sql). */
+export async function pushLocalRecords(
+  userId: string,
+  changes: SyncChanges,
+): Promise<void> {
+  const { error } = await admin().rpc("sync_push_records", {
+    p_user_id: userId,
+    p_todos: changes.todos,
+    p_events: changes.events,
+    p_notes: changes.notes,
+    p_folders: changes.folders,
+  });
+  if (error) throw error;
+}
+
+/**
+ * Rows changed on the server since `sinceMs` (by the server-clock synced_at
+ * column), mapped back to the camelCase client record shape. The returned
+ * cursor lags ~2s behind the server clock: rows committed between the query
+ * snapshot and the response get re-delivered next pull, which the client's
+ * idempotent merge absorbs.
+ */
+export async function pullLocalRecords(
+  userId: string,
+  sinceMs: number,
+  limit = 500,
+): Promise<SyncPullResponse> {
+  const since = new Date(sinceMs).toISOString();
+  const [todos, events, notes, folders] = await Promise.all([
+    admin().from("todos").select("*").eq("user_id", userId)
+      .gt("synced_at", since).order("synced_at").limit(limit),
+    admin().from("events").select("*").eq("user_id", userId)
+      .gt("synced_at", since).order("synced_at").limit(limit),
+    admin().from("notes").select("*").eq("user_id", userId)
+      .gt("synced_at", since).order("synced_at").limit(limit),
+    admin().from("folders").select("*").eq("user_id", userId)
+      .gt("synced_at", since).order("synced_at").limit(limit),
+  ]);
+  if (todos.error) throw todos.error;
+  if (events.error) throw events.error;
+  if (notes.error) throw notes.error;
+  if (folders.error) throw folders.error;
+
+  return {
+    cursor: Date.now() - 2000,
+    todos: (todos.data ?? []).map((row: TodoRow) => ({
+      id: row.id,
+      userId: row.user_id,
+      text: row.text,
+      completed: row.completed,
+      completedAt: row.completed_at,
+      date: row.date,
+      blockerId: row.blocker_id,
+      sortOrder: row.sort_order,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      deleted: row.deleted,
+    })),
+    events: (events.data ?? []).map((row: EventRow) => ({
+      id: row.id,
+      userId: row.user_id,
+      title: row.title,
+      description: row.description,
+      date: row.date,
+      allDay: row.all_day,
+      startMin: row.start_min,
+      endMin: row.end_min,
+      location: row.location,
+      source: row.source,
+      externalId: row.external_id,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      deleted: row.deleted,
+    })),
+    notes: (notes.data ?? []).map((row: NoteRow) => ({
+      id: row.id,
+      userId: row.user_id,
+      folderId: row.folder_id,
+      title: row.title,
+      content: row.content,
+      date: row.date,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      deleted: row.deleted,
+    })),
+    folders: (folders.data ?? []).map((row: FolderRow) => ({
+      id: row.id,
+      userId: row.user_id,
+      name: row.name,
+      sortOrder: row.sort_order,
+      createdAt: row.created_at,
+      updatedAt: row.updated_at,
+      deleted: row.deleted,
+    })),
+  };
+}
+
+// Snake_case row shapes as supabase-js returns them (date columns arrive as
+// "YYYY-MM-DD" strings; jsonb arrives parsed).
+interface TodoRow {
+  id: string; user_id: string; text: string; completed: boolean;
+  completed_at: number | null; date: string | null; blocker_id: string | null;
+  sort_order: number; created_at: number; updated_at: number; deleted: boolean;
+}
+interface EventRow {
+  id: string; user_id: string; title: string; description: string;
+  date: string; all_day: boolean; start_min: number | null; end_min: number | null;
+  location: string | null; source: string; external_id: string | null;
+  created_at: number; updated_at: number; deleted: boolean;
+}
+interface NoteRow {
+  id: string; user_id: string; folder_id: string | null; title: string;
+  content: unknown; date: string | null;
+  created_at: number; updated_at: number; deleted: boolean;
+}
+interface FolderRow {
+  id: string; user_id: string; name: string; sort_order: number;
+  created_at: number; updated_at: number; deleted: boolean;
 }

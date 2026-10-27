@@ -6,14 +6,20 @@ import { LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
 import { resetCoordinator } from "@/lib/swr-mutations";
+import { resetLocalData } from "@/lib/local/reset";
 
 // Single-letter labels keep the bar compact on phones; the full name shows
-// on hover/long-press via title, and screen readers use aria-label.
-const LINKS: { href: string; label: string; aria: string }[] = [
+// on hover/long-press via title, and screen readers use aria-label. The
+// productivity sections (T/C/N) sit after a divider — add C and N links when
+// those routes land.
+const LINKS: { href: string; label: string; aria: string; sepBefore?: boolean }[] = [
   { href: "/", label: "D", aria: "Daily" },
   { href: "/week", label: "W", aria: "Week" },
   { href: "/month", label: "M", aria: "Month" },
   { href: "/year", label: "Y", aria: "Year" },
+  { href: "/todos", label: "T", aria: "Todos", sepBefore: true },
+  { href: "/calendar", label: "C", aria: "Calendar" },
+  { href: "/notes", label: "N", aria: "Notes" },
   { href: "/settings", label: "⚙", aria: "Settings" },
 ];
 
@@ -24,6 +30,9 @@ export function Navbar() {
   async function handleLogout() {
     // Drop any queued debounced writes first so they can't fire after logout.
     resetCoordinator();
+    // Flush + wipe the local-first DB (bounded 2s) so the next account starts
+    // from a clean pull.
+    await resetLocalData();
     await fetch("/api/logout", { method: "POST" });
     router.push("/login");
     router.refresh();
@@ -40,13 +49,16 @@ export function Navbar() {
           <span className="hidden sm:inline">Accountability</span>
         </Link>
 
-        <nav className="flex items-center gap-0.5">
+        <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
           {LINKS.map((l) => {
             const active =
               l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
             return (
-              <Link
-                key={l.href}
+              <span key={l.href} className="flex items-center">
+                {l.sepBefore && (
+                  <span className="mx-1 h-5 w-px bg-[var(--border)]" aria-hidden />
+                )}
+                <Link
                 href={l.href}
                 title={l.aria}
                 aria-label={l.aria}
@@ -62,7 +74,8 @@ export function Navbar() {
                 ) : (
                   l.label
                 )}
-              </Link>
+                </Link>
+              </span>
             );
           })}
         </nav>

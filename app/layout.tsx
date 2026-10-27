@@ -12,7 +12,7 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-// Viewport lives in its own export in this Next version (metadata.viewport
+// Viewport lives in its own export (putting it under metadata.viewport
 // triggers a build warning). maximumScale/userScalable lock out pinch zoom;
 // the gesturestart preventDefault below covers iOS Safari, which ignores
 // user-scalable=no.

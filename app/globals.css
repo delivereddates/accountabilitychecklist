@@ -59,3 +59,80 @@ textarea {
   stroke: #111827;
   stroke-width: 1.4;
 }
+
+/* Notes editor (Tiptap) content styles — appended for the Notes section;
+   uses the same theme vars as the rest of the app. */
+.prose-note {
+  line-height: 1.6;
+}
+.prose-note h2 {
+  font-size: 1.25rem;
+  font-weight: 700;
+  margin: 1rem 0 0.4rem;
+}
+.prose-note h3 {
+  font-size: 1.05rem;
+  font-weight: 700;
+  margin: 0.8rem 0 0.3rem;
+}
+.prose-note ul {
+  list-style: disc;
+  padding-left: 1.4rem;
+  margin: 0.4rem 0;
+}
+.prose-note ol {
+  list-style: decimal;
+  padding-left: 1.4rem;
+  margin: 0.4rem 0;
+}
+.prose-note blockquote {
+  border-left: 3px solid var(--border);
+  color: var(--muted);
+  padding-left: 0.8rem;
+  margin: 0.5rem 0;
+}
+.prose-note pre {
+  background: var(--background);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  font-family: var(--font-geist-mono), monospace;
+  font-size: 0.85rem;
+  padding: 0.6rem;
+  overflow-x: auto;
+}
+.prose-note p {
+  margin: 0.35rem 0;
+}
+/* Editable tables */
+.prose-note table {
+  border-collapse: collapse;
+  margin: 0.6rem 0;
+  width: 100%;
+  table-layout: fixed;
+}
+.prose-note th,
+.prose-note td {
+  border: 1px solid var(--border);
+  padding: 0.35rem 0.5rem;
+  vertical-align: top;
+  position: relative;
+}
+.prose-note th {
+  background: var(--background);
+  font-weight: 600;
+  text-align: left;
+}
+.prose-note .selectedCell {
+  background: var(--color-check-soft);
+}
+.prose-note .column-resize-handle {
+  position: absolute;
+  right: -2px;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--color-check);
+}
+.resize-cursor {
+  cursor: col-resize;
+}

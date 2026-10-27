@@ -3,6 +3,7 @@
 import { useEffect } from "react";
 import { SWRConfig } from "swr";
 import { Navbar } from "@/components/Navbar";
+import { LocalSyncEngine } from "@/components/LocalSyncEngine";
 import { useDashboard } from "@/lib/use-dashboard";
 
 /**
@@ -41,6 +42,7 @@ export default function AppLayout({
         {children}
       </main>
       <DataLoader />
+      <LocalSyncEngine />
     </SWRConfig>
   );
 }
