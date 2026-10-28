@@ -22,7 +22,7 @@ const PUSH_BATCH = 200;
 const PULL_PAGE = 500;
 const BACKOFF_START_MS = 1_000;
 const BACKOFF_MAX_MS = 60_000;
-const VISIBLE_PULL_INTERVAL_MS = 60_000;
+const VISIBLE_PULL_INTERVAL_MS = 15_000;
 
 let pushTimer: ReturnType<typeof setTimeout> | null = null;
 let pushing = false;
@@ -234,26 +234,42 @@ export function startSyncEngine(): () => void {
   if (typeof window === "undefined") return () => {};
   void pullOnce(); // local data already renders via useLiveQuery
 
-  const onVisible = () => {
+  const sync = () => {
     if (document.visibilityState === "visible") {
       void pushOnce();
       void pullOnce();
     }
   };
+  // Devices that never changed visibility — a browser tab that stayed
+  // focused while the user edited on the phone, a foregrounded app — only
+  // heard from the interval before, which made a 10-second cross-check look
+  // like sync was dead. pageshow + focus fire on arrival/resume (iOS
+  // standalone apps don't reliably send visibilitychange), and hiding
+  // flushes pending pushes before iOS suspends the page's timers.
+  const onVisible = () => {
+    if (document.visibilityState === "visible") sync();
+    else void flushNow();
+  };
+  const onPageHide = () => void flushNow();
   const onOnline = () => {
     backoffMs = BACKOFF_START_MS;
-    void pushOnce();
-    void pullOnce();
+    sync();
   };
   const onInterval = () => {
     if (document.visibilityState === "visible") void pullOnce();
   };
 
   document.addEventListener("visibilitychange", onVisible);
+  window.addEventListener("pageshow", sync);
+  window.addEventListener("focus", sync);
+  window.addEventListener("pagehide", onPageHide);
   window.addEventListener("online", onOnline);
   const interval = setInterval(onInterval, VISIBLE_PULL_INTERVAL_MS);
   return () => {
     document.removeEventListener("visibilitychange", onVisible);
+    window.removeEventListener("pageshow", sync);
+    window.removeEventListener("focus", sync);
+    window.removeEventListener("pagehide", onPageHide);
     window.removeEventListener("online", onOnline);
     clearInterval(interval);
     if (pushTimer !== null) clearTimeout(pushTimer);
