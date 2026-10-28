@@ -17,6 +17,12 @@ import {
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { moveColumnBy, moveRowBy } from "./tableDrag";
+import {
+  selectColumn,
+  selectRow,
+  selectWholeTable,
+  toggleHeadingSelection,
+} from "./tableCommands";
 
 /**
  * Toolbar for the note editor: basic formatting plus table operations in a
@@ -92,10 +98,10 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
         chain().toggleItalic().run(),
       )}
       {btn(editor.isActive("heading", { level: 2 }), "h2", "Heading 2", <Heading2 className="h-4 w-4" />, () =>
-        chain().toggleHeading({ level: 2 }).run(),
+        toggleHeadingSelection(editor, 2),
       )}
       {btn(editor.isActive("heading", { level: 3 }), "h3", "Heading 3", <Heading3 className="h-4 w-4" />, () =>
-        chain().toggleHeading({ level: 3 }).run(),
+        toggleHeadingSelection(editor, 3),
       )}
       {btn(editor.isActive("bulletList"), "ul", "Bullet list", <List className="h-4 w-4" />, () =>
         chain().toggleBulletList().run(),
@@ -137,6 +143,22 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
             role="menu"
             className="absolute left-0 top-9 z-20 flex w-48 flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg"
           >
+            <MenuBtn
+              label="Select row"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => selectRow(editor))}
+            />
+            <MenuBtn
+              label="Select column"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => selectColumn(editor))}
+            />
+            <MenuBtn
+              label="Select table"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => selectWholeTable(editor))}
+            />
+            <span className="my-1 h-px bg-[var(--border)]" />
             <MenuBtn
               label="Insert 3×3 table"
               disabled={editor.isActive("table")}
@@ -200,11 +222,6 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
               onClick={act(() => chain().toggleHeaderRow().run())}
             />
             <MenuBtn
-              label="Clear headings (whole table)"
-              disabled={!editor.isActive("table")}
-              onClick={act(() => clearTableHeadings(editor))}
-            />
-            <MenuBtn
               label="Delete table"
               disabled={!editor.isActive("table")}
               onClick={act(() => chain().deleteTable().run())}
@@ -224,35 +241,6 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
         !editor.can().redo(),
       )}
     </div>
-  );
-}
-
-/**
- * Convert every heading in the cursor's table to plain paragraphs. Repairs
- * the "select-all + heading" accident that turns all cell text big and bold
- * (setBlockType reaches inside table cells) — on a phone there's no
- * practical way to select a whole table, so this is the one-tap fix.
- */
-function clearTableHeadings(editor: Editor): void {
-  const { tr, schema } = editor.state;
-  const { $from } = editor.state.selection;
-  let depth = -1;
-  for (let d = $from.depth; d >= 0; d--) {
-    if ($from.node(d).type.name === "table") {
-      depth = d;
-      break;
-    }
-  }
-  if (depth < 0) return;
-  const start = $from.before(depth);
-  const end = start + $from.node(depth).nodeSize;
-  let hasHeading = false;
-  tr.doc.nodesBetween(start + 1, end - 1, (node) => {
-    if (node.type.name === "heading") hasHeading = true;
-  });
-  if (!hasHeading) return;
-  editor.view.dispatch(
-    tr.setBlockType(start + 1, end - 1, schema.nodes.paragraph).scrollIntoView(),
   );
 }
 
