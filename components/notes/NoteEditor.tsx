@@ -26,8 +26,10 @@ import type { FolderTreeNode } from "./folderTree";
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 const AUTOSAVE_MS = 500;
 
-// Editor font-size preference, per device.
-const FONT_KEY = "note-font-size";
+// Editor font-size preference, per device. The -v2 suffix retires the old
+// key: values saved before phones defaulted to "sm" kept overriding the new
+// default, so the text stayed big no matter what. One clean reset.
+const FONT_KEY = "note-font-size-v2";
 type FontSize = "sm" | "base" | "lg";
 const FONT_SIZES: { key: FontSize; label: string; px: string }[] = [
   { key: "sm", label: "Small text", px: "0.875rem" },
