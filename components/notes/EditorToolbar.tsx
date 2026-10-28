@@ -200,6 +200,11 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
               onClick={act(() => chain().toggleHeaderRow().run())}
             />
             <MenuBtn
+              label="Clear headings (whole table)"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => clearTableHeadings(editor))}
+            />
+            <MenuBtn
               label="Delete table"
               disabled={!editor.isActive("table")}
               onClick={act(() => chain().deleteTable().run())}
@@ -219,6 +224,35 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
         !editor.can().redo(),
       )}
     </div>
+  );
+}
+
+/**
+ * Convert every heading in the cursor's table to plain paragraphs. Repairs
+ * the "select-all + heading" accident that turns all cell text big and bold
+ * (setBlockType reaches inside table cells) — on a phone there's no
+ * practical way to select a whole table, so this is the one-tap fix.
+ */
+function clearTableHeadings(editor: Editor): void {
+  const { tr, schema } = editor.state;
+  const { $from } = editor.state.selection;
+  let depth = -1;
+  for (let d = $from.depth; d >= 0; d--) {
+    if ($from.node(d).type.name === "table") {
+      depth = d;
+      break;
+    }
+  }
+  if (depth < 0) return;
+  const start = $from.before(depth);
+  const end = start + $from.node(depth).nodeSize;
+  let hasHeading = false;
+  tr.doc.nodesBetween(start + 1, end - 1, (node) => {
+    if (node.type.name === "heading") hasHeading = true;
+  });
+  if (!hasHeading) return;
+  editor.view.dispatch(
+    tr.setBlockType(start + 1, end - 1, schema.nodes.paragraph).scrollIntoView(),
   );
 }
 
