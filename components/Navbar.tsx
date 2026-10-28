@@ -10,11 +10,12 @@ import { resetCoordinator } from "@/lib/swr-mutations";
 import { resetLocalData } from "@/lib/local/reset";
 
 // Single-letter labels keep the bar compact on phones; the full name shows
-// on hover/long-press via title, and screen readers use aria-label. Daily is
-// the home; Week/Month/Year live in the accountability sidebar (see
+// on hover/long-press via title, and screen readers use aria-label. Calendar
+// is the app's home (/ redirects there); Daily is the accountability section.
+// Week/Month/Year live in the accountability sidebar (see
 // components/summary/SummarySidebar) — this bar switches sections only.
 const LINKS: { href: string; label: string; aria: string; sepBefore?: boolean }[] = [
-  { href: "/", label: "D", aria: "Daily" },
+  { href: "/daily", label: "D", aria: "Daily" },
   { href: "/todos", label: "T", aria: "Todos", sepBefore: true },
   { href: "/calendar", label: "C", aria: "Calendar" },
   { href: "/notes", label: "N", aria: "Notes" },
@@ -40,7 +41,7 @@ export function Navbar() {
     <header className="sticky top-0 z-30 border-b border-[var(--border)] bg-[var(--card)]/85 backdrop-blur">
       <div className="mx-auto flex h-14 max-w-6xl items-center gap-1 px-4">
         <Link
-          href="/"
+          href="/calendar"
           className="mr-2 flex items-center gap-2 font-semibold tracking-tight"
         >
           <Logo className="h-6 w-6" />
@@ -49,8 +50,7 @@ export function Navbar() {
 
         <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto">
           {LINKS.map((l) => {
-            const active =
-              l.href === "/" ? pathname === "/" : pathname.startsWith(l.href);
+            const active = pathname === l.href || pathname.startsWith(l.href + "/");
             return (
               <span key={l.href} className="flex items-center">
                 {l.sepBefore && (

@@ -12,9 +12,9 @@ import { cn } from "@/lib/utils";
 
 // Period views for the accountability section. Vertical rail next to the
 // content on md+, horizontal chip row above it on phones. (The top navbar
-// only links the sections: Daily stays as home, W/M/Y live here.)
+// links the sections — the app home is the calendar; Daily lives here.)
 const VIEWS = [
-  { href: "/", label: "Daily", icon: CalendarCheck },
+  { href: "/daily", label: "Daily", icon: CalendarCheck },
   { href: "/week", label: "Week", icon: CalendarRange },
   { href: "/month", label: "Month", icon: CalendarDays },
   { href: "/year", label: "Year", icon: Calendar },
@@ -28,8 +28,7 @@ export function SummarySidebar() {
       className="flex shrink-0 gap-1 overflow-x-auto pb-1 md:w-40 md:flex-col md:overflow-visible md:pb-0"
     >
       {VIEWS.map(({ href, label, icon: Icon }) => {
-        const active =
-          href === "/" ? pathname === "/" : pathname.startsWith(href);
+        const active = pathname === href || pathname.startsWith(href + "/");
         return (
           <Link
             key={href}

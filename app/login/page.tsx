@@ -23,8 +23,10 @@ export default function LoginPage() {
     });
 
     if (res.ok) {
+      // Default to the calendar (the app's home); ?from= restores a deep
+      // link the middleware stashed on the redirect to /login.
       const from =
-        new URLSearchParams(window.location.search).get("from") || "/";
+        new URLSearchParams(window.location.search).get("from") || "/calendar";
       router.replace(from);
       router.refresh();
       return;
