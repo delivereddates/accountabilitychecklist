@@ -12,12 +12,14 @@ import {
 } from "@/lib/local/hooks";
 import { SyncDot } from "@/components/todos/TodosClient";
 import { FolderSidebar } from "./FolderSidebar";
+import { buildFolderTree, subtreeIds } from "./folderTree";
 import { NoteList } from "./NoteList";
 import { NoteEditor } from "./NoteEditor";
 
 /**
- * Three-pane notes layout (folders / list / editor) on md+, master-detail
- * swap on phones. `?id=` deep-links a note (used by the calendar agenda).
+ * Three-pane notes layout (folder tree / list / editor) on md+,
+ * master-detail swap on phones. `?id=` deep-links a note (used by the
+ * calendar agenda).
  */
 export function NotesClient({ userId }: { userId: string }) {
   const notes = useNotes(userId);
@@ -30,19 +32,14 @@ export function NotesClient({ userId }: { userId: string }) {
   const paramId = searchParams.get("id");
   const [selectedId, setSelectedId] = useState<string | null>(paramId);
 
-  const sortedFolders = useMemo(
-    () =>
-      [...(folders ?? [])].sort(
-        (a, b) => a.sortOrder - b.sortOrder || a.name.localeCompare(b.name),
-      ),
-    [folders],
-  );
+  const tree = useMemo(() => buildFolderTree(folders ?? []), [folders]);
   const visibleNotes = useMemo(() => {
     const all = notes ?? [];
-    return folder === "all"
-      ? all
-      : all.filter((n) => n.folderId === folder);
-  }, [notes, folder]);
+    if (folder === "all") return all;
+    // Selecting a folder shows its whole subtree.
+    const ids = subtreeIds(tree, folder);
+    return all.filter((n) => n.folderId != null && ids.has(n.folderId));
+  }, [notes, folder, tree]);
 
   const selected =
     (notes ?? []).find((n) => n.id === selectedId) ?? null;
@@ -74,7 +71,7 @@ export function NotesClient({ userId }: { userId: string }) {
           <div className="flex flex-col gap-3">
             <FolderSidebar
               userId={userId}
-              folders={sortedFolders}
+              tree={tree}
               notes={notes}
               selected={folder}
               onSelect={setFolder}
@@ -95,7 +92,7 @@ export function NotesClient({ userId }: { userId: string }) {
               <NoteEditor
                 key={selected.id}
                 note={selected}
-                folders={sortedFolders}
+                folderOptions={tree.order}
                 onBack={() => setSelectedId(null)}
               />
             ) : (

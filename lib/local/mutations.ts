@@ -250,7 +250,11 @@ export async function duplicateEvent(id: string): Promise<string | null> {
 // Folders
 // ---------------------------------------------------------------------------
 
-export async function createFolder(userId: string, name: string): Promise<string> {
+export async function createFolder(
+  userId: string,
+  name: string,
+  parentId: string | null = null,
+): Promise<string> {
   const db = getDb();
   const id = newId();
   const now = nowMs();
@@ -258,6 +262,7 @@ export async function createFolder(userId: string, name: string): Promise<string
     id,
     userId,
     name,
+    parentId,
     sortOrder: 0,
     createdAt: now,
     updatedAt: now,
@@ -283,8 +288,8 @@ export async function renameFolder(id: string, name: string): Promise<void> {
 }
 
 /**
- * Soft-delete a folder and detach its notes (folderId → null) in the same
- * transaction — notes are kept, just unfiled.
+ * Soft-delete a folder in one transaction: its notes become unfiled and its
+ * subfolders move up to the deleted folder's parent — nothing is lost.
  */
 export async function deleteFolder(id: string): Promise<void> {
   const db = getDb();
@@ -294,6 +299,13 @@ export async function deleteFolder(id: string): Promise<void> {
     if (!cur) return;
     await db.folders.put({ ...cur, deleted: true, updatedAt: now });
     await queue(db, "folders", id);
+    const children = await db.folders
+      .filter((f) => f.parentId === id && !f.deleted)
+      .toArray();
+    for (const c of children) {
+      await db.folders.put({ ...c, parentId: cur.parentId, updatedAt: now });
+      await queue(db, "folders", c.id);
+    }
     const notes = await db.notes
       .filter((n) => n.folderId === id && !n.deleted)
       .toArray();

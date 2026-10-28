@@ -11,8 +11,11 @@ import {
 } from "@tiptap/extension-table";
 import { ArrowLeft, Trash2 } from "lucide-react";
 import { deleteNote, updateNote } from "@/lib/local/mutations";
-import type { FolderRecord, NoteRecord } from "@/lib/local/types";
+import type { NoteRecord } from "@/lib/local/types";
 import { EditorToolbar } from "./EditorToolbar";
+import { pasteGrid } from "./pasteGrid";
+import { TableDrag } from "./tableDrag";
+import type { FolderTreeNode } from "./folderTree";
 
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 const AUTOSAVE_MS = 500;
@@ -23,11 +26,11 @@ const AUTOSAVE_MS = 500;
  */
 export function NoteEditor({
   note,
-  folders,
+  folderOptions,
   onBack,
 }: {
   note: NoteRecord;
-  folders: FolderRecord[];
+  folderOptions: FolderTreeNode[];
   onBack: () => void;
 }) {
   const noteIdRef = useRef(note.id);
@@ -57,12 +60,23 @@ export function NoteEditor({
       TableRow,
       TableCell,
       TableHeader,
+      TableDrag,
     ],
     content: (note.content as object) ?? EMPTY_DOC,
     immediatelyRender: false, // required under Next SSR
     editorProps: {
       attributes: {
         class: "prose-note outline-none min-h-[50vh] px-1",
+      },
+      // CSV / TSV text pastes become table rows (components/notes/pasteGrid).
+      // Clipboard HTML that already contains a table is left to PM's parser.
+      handlePaste: (view, event) => {
+        const dt = event.clipboardData;
+        if (!dt) return false;
+        if (/<table[\s>]/i.test(dt.getData("text/html"))) return false;
+        const text = dt.getData("text/plain");
+        if (!text) return false;
+        return pasteGrid(view, text);
       },
     },
     onUpdate: ({ editor }) => {
@@ -113,9 +127,11 @@ export function NoteEditor({
           className="h-9 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm text-[var(--muted)]"
         >
           <option value="">No folder</option>
-          {folders.map((f) => (
-            <option key={f.id} value={f.id}>
-              {f.name || "(folder)"}
+          {folderOptions.map(({ folder, depth }) => (
+            <option key={folder.id} value={folder.id}>
+              {"  ".repeat(depth)}
+              {depth > 0 ? "· " : ""}
+              {folder.name || "(folder)"}
             </option>
           ))}
         </select>

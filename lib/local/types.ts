@@ -45,6 +45,8 @@ export interface EventRecord extends BaseRecord {
 
 export interface FolderRecord extends BaseRecord {
   name: string;
+  /** Parent folder id — folders nest in the sidebar. No FK (see blockerId). */
+  parentId: string | null;
   sortOrder: number;
 }
 

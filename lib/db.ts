@@ -583,6 +583,7 @@ export async function pullLocalRecords(
       id: row.id,
       userId: row.user_id,
       name: row.name,
+      parentId: row.parent_id,
       sortOrder: row.sort_order,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
@@ -610,6 +611,6 @@ interface NoteRow {
   created_at: number; updated_at: number; deleted: boolean;
 }
 interface FolderRow {
-  id: string; user_id: string; name: string; sort_order: number;
-  created_at: number; updated_at: number; deleted: boolean;
+  id: string; user_id: string; name: string; parent_id: string | null;
+  sort_order: number; created_at: number; updated_at: number; deleted: boolean;
 }

@@ -62,19 +62,25 @@ create unique index if not exists events_source_external_idx
   on public.events(user_id, source, external_id) where external_id is not null;
 
 -- ---------------------------------------------------------------------------
--- folders: note groupings. No FK from notes.folder_id (see todos.blocker_id).
+-- folders: note groupings, nested via parent_id (a null parent = top level).
+-- No FK from notes.folder_id or folders.parent_id (see todos.blocker_id) —
+-- references resolve client-side so LWW rows can arrive in any order.
+-- The alter covers databases created before parent_id existed.
 -- ---------------------------------------------------------------------------
 create table if not exists public.folders (
   id         uuid primary key,
   user_id    uuid not null references public.users(id) on delete cascade,
   name       text not null default '',
+  parent_id  uuid,
   sort_order double precision not null default 0,
   created_at bigint not null,
   updated_at bigint not null,
   deleted    boolean not null default false,
   synced_at  timestamptz not null default now()
 );
+alter table public.folders add column if not exists parent_id uuid;
 create index if not exists folders_user_synced_idx on public.folders(user_id, synced_at);
+create index if not exists folders_user_parent_idx on public.folders(user_id, parent_id);
 
 -- ---------------------------------------------------------------------------
 -- notes: rich-text notes (content = Tiptap JSON document, stored as jsonb).
@@ -122,13 +128,15 @@ language plpgsql as $$
 declare r jsonb;
 begin
   for r in select * from jsonb_array_elements(p_folders) loop
-    insert into public.folders (id, user_id, name, sort_order, created_at, updated_at, deleted)
+    insert into public.folders (id, user_id, name, parent_id, sort_order, created_at, updated_at, deleted)
     values ((r->>'id')::uuid, p_user_id, coalesce(r->>'name',''),
+            nullif(r->>'parentId','')::uuid,
             coalesce((r->>'sortOrder')::double precision, 0),
             (r->>'createdAt')::bigint, (r->>'updatedAt')::bigint,
             coalesce((r->>'deleted')::boolean, false))
     on conflict (id) do update
-      set name = excluded.name, sort_order = excluded.sort_order,
+      set name = excluded.name, parent_id = excluded.parent_id,
+          sort_order = excluded.sort_order,
           updated_at = excluded.updated_at, deleted = excluded.deleted,
           synced_at = now()
       where excluded.updated_at > folders.updated_at;

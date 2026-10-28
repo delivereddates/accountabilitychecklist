@@ -1,8 +1,10 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import type { Editor } from "@tiptap/react";
 import {
   Bold,
+  ChevronDown,
   Heading2,
   Heading3,
   Italic,
@@ -14,13 +16,36 @@ import {
   Undo2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
+import { moveColumnBy, moveRowBy } from "./tableDrag";
 
 /**
  * Toolbar for the note editor: basic formatting plus table operations in a
- * native <details> disclosure (no menu library). All commands are chained
- * with .focus() so typing resumes immediately.
+ * controlled dropdown (closes on outside click, Escape, or after running a
+ * command). All commands are chained with .focus() so typing resumes
+ * immediately.
  */
 export function EditorToolbar({ editor }: { editor: Editor | null }) {
+  const [tableMenuOpen, setTableMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!tableMenuOpen) return;
+    const onPointerDown = (e: PointerEvent) => {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setTableMenuOpen(false);
+      }
+    };
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setTableMenuOpen(false);
+    };
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKeyDown);
+    };
+  }, [tableMenuOpen]);
+
   if (!editor) return null;
 
   const btn = (
@@ -52,6 +77,12 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
 
   const chain = () => editor.chain().focus();
 
+  // Menu items close the dropdown after running.
+  const act = (run: () => void) => () => {
+    run();
+    setTableMenuOpen(false);
+  };
+
   return (
     <div className="flex flex-wrap items-center gap-0.5 rounded-lg border border-[var(--border)] bg-[var(--card)] p-1">
       {btn(editor.isActive("bold"), "b", "Bold", <Bold className="h-4 w-4" />, () =>
@@ -78,64 +109,104 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
 
       <span className="mx-1 h-5 w-px bg-[var(--border)]" />
 
-      <details className="relative">
-        <summary
+      <div className="relative" ref={menuRef}>
+        <button
+          type="button"
+          aria-haspopup="menu"
+          aria-expanded={tableMenuOpen}
+          onMouseDown={(e) => e.preventDefault()} // keep editor selection
+          onClick={() => setTableMenuOpen((v) => !v)}
           className={cn(
-            "flex h-8 cursor-pointer list-none items-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--muted)] hover:bg-black/5 hover:text-[var(--foreground)]",
-            editor.isActive("table") && "bg-[var(--color-check-soft)] text-[var(--color-check)]",
+            "flex h-8 cursor-pointer items-center gap-1 rounded-md px-2 text-xs font-medium text-[var(--muted)] transition-colors hover:bg-black/5 hover:text-[var(--foreground)]",
+            (tableMenuOpen || editor.isActive("table")) &&
+              "bg-[var(--color-check-soft)] text-[var(--color-check)]",
           )}
         >
           <TableIcon className="h-4 w-4" />
           Table
-        </summary>
-        <div className="absolute left-0 top-9 z-20 flex w-48 flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 text-sm shadow-lg">
-          <MenuBtn
-            label="Insert 3×3 table"
-            disabled={editor.isActive("table")}
-            onClick={() => chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run()}
+          <ChevronDown
+            className={cn(
+              "h-3 w-3 transition-transform",
+              tableMenuOpen && "rotate-180",
+            )}
           />
-          <MenuBtn
-            label="Add row above"
-            disabled={!editor.isActive("table")}
-            onClick={() => chain().addRowBefore().run()}
-          />
-          <MenuBtn
-            label="Add row below"
-            disabled={!editor.isActive("table")}
-            onClick={() => chain().addRowAfter().run()}
-          />
-          <MenuBtn
-            label="Delete row"
-            disabled={!editor.isActive("table")}
-            onClick={() => chain().deleteRow().run()}
-          />
-          <MenuBtn
-            label="Add column left"
-            disabled={!editor.isActive("table")}
-            onClick={() => chain().addColumnBefore().run()}
-          />
-          <MenuBtn
-            label="Add column right"
-            disabled={!editor.isActive("table")}
-            onClick={() => chain().addColumnAfter().run()}
-          />
-          <MenuBtn
-            label="Delete column"
-            disabled={!editor.isActive("table")}
-            onClick={() => chain().deleteColumn().run()}
-          />
-          <MenuBtn
-            label="Toggle header row"
-            disabled={!editor.isActive("table")}
-            onClick={() => chain().toggleHeaderRow().run()}
-          />
-          <MenuBtn
-            label="Delete table"
-            disabled={!editor.isActive("table")}
-            onClick={() => chain().deleteTable().run()}
-          />
-        </div>
-      </details>
+        </button>
+
+        {tableMenuOpen && (
+          <div
+            role="menu"
+            className="absolute left-0 top-9 z-20 flex w-48 flex-col rounded-lg border border-[var(--border)] bg-[var(--card)] p-1 shadow-lg"
+          >
+            <MenuBtn
+              label="Insert 3×3 table"
+              disabled={editor.isActive("table")}
+              onClick={act(() =>
+                chain().insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run(),
+              )}
+            />
+            <MenuBtn
+              label="Add row above"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => chain().addRowBefore().run())}
+            />
+            <MenuBtn
+              label="Add row below"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => chain().addRowAfter().run())}
+            />
+            <MenuBtn
+              label="Move row up"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => moveRowBy(editor, -1))}
+            />
+            <MenuBtn
+              label="Move row down"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => moveRowBy(editor, 1))}
+            />
+            <MenuBtn
+              label="Delete row"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => chain().deleteRow().run())}
+            />
+            <MenuBtn
+              label="Add column left"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => chain().addColumnBefore().run())}
+            />
+            <MenuBtn
+              label="Add column right"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => chain().addColumnAfter().run())}
+            />
+            <MenuBtn
+              label="Move column left"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => moveColumnBy(editor, -1))}
+            />
+            <MenuBtn
+              label="Move column right"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => moveColumnBy(editor, 1))}
+            />
+            <MenuBtn
+              label="Delete column"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => chain().deleteColumn().run())}
+            />
+            <MenuBtn
+              label="Toggle header row"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => chain().toggleHeaderRow().run())}
+            />
+            <MenuBtn
+              label="Delete table"
+              disabled={!editor.isActive("table")}
+              onClick={act(() => chain().deleteTable().run())}
+            />
+          </div>
+        )}
+      </div>
 
       <span className="mx-1 h-5 w-px bg-[var(--border)]" />
 
@@ -164,6 +235,7 @@ function MenuBtn({
   return (
     <button
       type="button"
+      role="menuitem"
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
@@ -176,4 +248,3 @@ function MenuBtn({
     </button>
   );
 }
-

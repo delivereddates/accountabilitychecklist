@@ -136,3 +136,56 @@ textarea {
 .resize-cursor {
   cursor: col-resize;
 }
+
+/* Table drag grips (components/notes/tableDrag.ts). The wrapper gets
+   compensating padding+margin so grips can paint outside the table without
+   being clipped by its overflow-x: auto — net layout is unchanged. */
+.prose-note .tableWrapper {
+  overflow-x: auto;
+  padding: 1.5rem 0 0 1.5rem;
+  margin: -1.5rem 0 0 -1.5rem;
+}
+.prose-note .tbl-grip {
+  position: absolute;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1rem;
+  height: 1rem;
+  color: var(--muted);
+  opacity: 0;
+  cursor: grab;
+  z-index: 5;
+  transition: opacity 0.12s;
+}
+.prose-note .tbl-grip:hover {
+  color: var(--color-check);
+}
+.prose-note .tbl-grip:active {
+  cursor: grabbing;
+}
+.prose-note table:hover .tbl-grip {
+  opacity: 1;
+}
+.prose-note .tbl-grip-row {
+  left: -1.35rem;
+  top: 50%;
+  transform: translateY(-50%);
+}
+.prose-note .tbl-grip-col {
+  top: -1.35rem;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.prose-note .tbl-grip-col svg {
+  transform: rotate(90deg);
+}
+/* Drop target while dragging (outline on cells — reliable in every browser;
+   outlines on <tr> are not). */
+.prose-note tr.tbl-drop-target > td,
+.prose-note tr.tbl-drop-target > th,
+.prose-note td.tbl-drop-target,
+.prose-note th.tbl-drop-target {
+  outline: 2px solid var(--color-check);
+  outline-offset: -2px;
+}
