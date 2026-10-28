@@ -61,60 +61,61 @@ textarea {
 }
 
 /* Notes editor (Tiptap) content styles — appended for the Notes section;
-   uses the same theme vars as the rest of the app. */
+   uses the same theme vars as the rest of the app. All sizes are em (not
+   rem) so the editor's font-size control scales everything with the text:
+   headings, tables (cell padding + row heights), lists, quotes, grips. */
 .prose-note {
   line-height: 1.6;
 }
-/* em (not rem) so headings follow the editor's font-size control */
 .prose-note h2 {
   font-size: 1.25em;
   font-weight: 700;
-  margin: 1rem 0 0.4rem;
+  margin: 1em 0 0.4em;
 }
 .prose-note h3 {
   font-size: 1.05em;
   font-weight: 700;
-  margin: 0.8rem 0 0.3rem;
+  margin: 0.8em 0 0.3em;
 }
 .prose-note ul {
   list-style: disc;
-  padding-left: 1.4rem;
-  margin: 0.4rem 0;
+  padding-left: 1.4em;
+  margin: 0.4em 0;
 }
 .prose-note ol {
   list-style: decimal;
-  padding-left: 1.4rem;
-  margin: 0.4rem 0;
+  padding-left: 1.4em;
+  margin: 0.4em 0;
 }
 .prose-note blockquote {
   border-left: 3px solid var(--border);
   color: var(--muted);
-  padding-left: 0.8rem;
-  margin: 0.5rem 0;
+  padding-left: 0.8em;
+  margin: 0.5em 0;
 }
 .prose-note pre {
   background: var(--background);
   border: 1px solid var(--border);
-  border-radius: 0.5rem;
+  border-radius: 0.5em;
   font-family: var(--font-geist-mono), monospace;
   font-size: 0.85em;
-  padding: 0.6rem;
+  padding: 0.6em;
   overflow-x: auto;
 }
 .prose-note p {
-  margin: 0.35rem 0;
+  margin: 0.35em 0;
 }
 /* Editable tables */
 .prose-note table {
   border-collapse: collapse;
-  margin: 0.6rem 0;
+  margin: 0.6em 0;
   width: 100%;
   table-layout: fixed;
 }
 .prose-note th,
 .prose-note td {
   border: 1px solid var(--border);
-  padding: 0.35rem 0.5rem;
+  padding: 0.35em 0.5em;
   vertical-align: top;
   position: relative;
 }
@@ -143,16 +144,16 @@ textarea {
    being clipped by its overflow-x: auto — net layout is unchanged. */
 .prose-note .tableWrapper {
   overflow-x: auto;
-  padding: 1.5rem 0 0 1.5rem;
-  margin: -1.5rem 0 0 -1.5rem;
+  padding: 1.5em 0 0 1.5em;
+  margin: -1.5em 0 0 -1.5em;
 }
 .prose-note .tbl-grip {
   position: absolute;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1rem;
-  height: 1rem;
+  width: 1em;
+  height: 1em;
   color: var(--muted);
   opacity: 0;
   cursor: grab;
@@ -169,12 +170,12 @@ textarea {
   opacity: 1;
 }
 .prose-note .tbl-grip-row {
-  left: -1.35rem;
+  left: -1.35em;
   top: 50%;
   transform: translateY(-50%);
 }
 .prose-note .tbl-grip-col {
-  top: -1.35rem;
+  top: -1.35em;
   left: 50%;
   transform: translateX(-50%);
 }

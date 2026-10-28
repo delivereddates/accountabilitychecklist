@@ -62,7 +62,11 @@ export function NoteEditor({
   const [font, setFont] = useState<FontSize>(() => {
     if (typeof window === "undefined") return "base";
     const v = window.localStorage.getItem(FONT_KEY);
-    return v === "sm" || v === "lg" ? v : "base";
+    if (v === "sm" || v === "base" || v === "lg") return v;
+    // First visit on this device: phones start one step smaller — the base
+    // size matches the rest of the app's text-sm UI and reads far better on
+    // a narrow screen. A saved preference always wins.
+    return window.matchMedia("(max-width: 767px)").matches ? "sm" : "base";
   });
 
   function chooseFont(next: FontSize) {
