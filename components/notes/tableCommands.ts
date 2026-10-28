@@ -58,11 +58,12 @@ export function selectColumn(editor: Editor): void {
 }
 
 /**
- * Heading toggle that understands cell selections: the whole selected range
- * flips to the heading (or back to plain text if any part of it is a
- * heading). setBlockType walks into table cells — the same behavior that
- * lets select-all + H2 hit every cell — so it covers each selected cell.
- * Outside a cell selection it's the normal toggle.
+ * Heading toggle that understands cell selections: every selected cell's
+ * blocks flip to the heading (or back to plain text if any of them is a
+ * heading). Note this must use `$anchorCell`/`$headCell`/`forEachCell`, NOT
+ * the inherited `$anchor`/`$head` — for a CellSelection those hold only the
+ * head cell's content range (end-of-cell, where nodeAfter is null). Outside
+ * a cell selection it's the normal toggle.
  */
 export function toggleHeadingSelection(
   editor: Editor,
@@ -74,20 +75,21 @@ export function toggleHeadingSelection(
     editor.chain().focus().toggleHeading({ level }).run();
     return;
   }
-  // Cover the last cell's content: plain sel.to stops at its start.
-  const first = Math.min(sel.$anchor.pos, sel.$head.pos);
-  const lastRes = sel.$anchor.pos >= sel.$head.pos ? sel.$anchor : sel.$head;
-  const lastCell = lastRes.nodeAfter;
-  if (!lastCell) return;
-  const from = first + 1; // inside the first cell
-  const to = lastRes.pos + lastCell.nodeSize - 1; // end of last cell content
   const { tr, schema } = state;
   let hasHeading = false;
-  tr.doc.nodesBetween(from, to, (node) => {
-    if (node.type.name === "heading") hasHeading = true;
+  sel.forEachCell((cell) => {
+    for (let i = 0; i < cell.childCount; i++) {
+      if (cell.child(i).type.name === "heading") hasHeading = true;
+    }
   });
   const type = hasHeading ? schema.nodes.paragraph : schema.nodes.heading;
-  editor.view.dispatch(
-    tr.setBlockType(from, to, type, hasHeading ? {} : { level }),
-  );
+  const attrs = hasHeading ? {} : { level };
+  // Per cell, never one contiguous from/to: that range would spill into the
+  // unselected cells of the rows in between (a column selection must not
+  // re-format the columns it doesn't cover).
+  sel.forEachCell((cell, pos) => {
+    tr.setBlockType(pos + 1, pos + cell.nodeSize - 1, type, attrs);
+  });
+  editor.view.focus();
+  editor.view.dispatch(tr);
 }

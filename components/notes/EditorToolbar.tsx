@@ -67,7 +67,10 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
       title={title}
       aria-label={title}
       disabled={disabled}
-      onMouseDown={(e) => e.preventDefault()} // keep editor selection
+      // Keep editor selection: pointerdown covers touch (iOS dismisses the
+      // selection when a tap moves focus), mousedown covers mouse.
+      onPointerDown={(e) => e.preventDefault()}
+      onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       className={cn(
         "inline-flex h-8 w-8 items-center justify-center rounded-md transition-colors",
@@ -120,6 +123,7 @@ export function EditorToolbar({ editor }: { editor: Editor | null }) {
           type="button"
           aria-haspopup="menu"
           aria-expanded={tableMenuOpen}
+          onPointerDown={(e) => e.preventDefault()} // keep editor selection on touch
           onMouseDown={(e) => e.preventDefault()} // keep editor selection
           onClick={() => setTableMenuOpen((v) => !v)}
           className={cn(
@@ -258,6 +262,7 @@ function MenuBtn({
     <button
       type="button"
       role="menuitem"
+      onPointerDown={(e) => e.preventDefault()} // keep editor selection on touch
       onMouseDown={(e) => e.preventDefault()}
       onClick={onClick}
       disabled={disabled}
