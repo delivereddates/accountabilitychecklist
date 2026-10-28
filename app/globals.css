@@ -125,11 +125,19 @@ textarea {
   padding: 0.35em 0.5em;
   vertical-align: top;
   position: relative;
+  /* Cells render exactly like body text — no UA bold on th, no inherited
+     weight, tighter leading, and no paragraph margins padding rows out. */
+  font-size: 1em;
+  font-weight: 400;
+  line-height: 1.45;
 }
 .prose-note th {
   background: var(--background);
-  font-weight: 500;
   text-align: left;
+}
+.prose-note th p,
+.prose-note td p {
+  margin: 0;
 }
 .prose-note .selectedCell {
   background: var(--color-check-soft);
