@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
-import { CloudOff } from "lucide-react";
+import { CloudOff, FolderTree } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { useFolders, useNotes, useStorageAvailable } from "@/lib/local/hooks";
 import { FolderSidebar } from "./FolderSidebar";
@@ -11,8 +11,10 @@ import { NoteList } from "./NoteList";
 import { NoteEditor } from "./NoteEditor";
 
 /**
- * Three-pane notes layout (folders / list / editor) on md+, master-detail
- * swap on phones. The sidebar tree shows each folder's contents inline
+ * Three-pane notes layout (folders / list / editor) on md+. On phones it's a
+ * master-detail swap: the folder sidebar is hidden behind a header toggle
+ * (and always hidden once a note is open), picking a folder returns to the
+ * note list. The sidebar tree shows each folder's contents inline
  * (subfolders + notes) when expanded; selecting a folder scopes the note
  * list to that level. `?id=` deep-links a note (used by the calendar
  * agenda).
@@ -26,6 +28,8 @@ export function NotesClient({ userId }: { userId: string }) {
   const [folder, setFolder] = useState<string | "all">("all");
   const paramId = searchParams.get("id");
   const [selectedId, setSelectedId] = useState<string | null>(paramId);
+  // Phones only: folder panel is opt-in (desktop always shows the rail).
+  const [showFolders, setShowFolders] = useState(false);
 
   const tree = useMemo(() => buildFolderTree(folders ?? []), [folders]);
   // A deleted (or mid-sync) selection browses All notes until re-picked.
@@ -47,6 +51,19 @@ export function NotesClient({ userId }: { userId: string }) {
         <span className="text-sm text-[var(--muted)]">
           {visibleNotes.length} note{visibleNotes.length === 1 ? "" : "s"}
         </span>
+        <button
+          onClick={() => setShowFolders((v) => !v)}
+          title={showFolders ? "Hide folders" : "Show folders"}
+          aria-label={showFolders ? "Hide folders" : "Show folders"}
+          className={cn(
+            "ml-auto inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] transition-colors hover:bg-black/5 md:hidden",
+            showFolders
+              ? "bg-[var(--color-check-soft)] text-[var(--color-check)]"
+              : "text-[var(--muted)]",
+          )}
+        >
+          <FolderTree className="h-4 w-4" />
+        </button>
       </header>
 
       {!storageOk && (
@@ -61,13 +78,21 @@ export function NotesClient({ userId }: { userId: string }) {
         <p className="text-sm text-[var(--muted)]">Loading…</p>
       ) : (
         <div className="flex flex-col gap-4 md:grid md:grid-cols-[11rem_15rem_1fr] md:items-start">
-          <div className="flex flex-col gap-3">
+          <div
+            className={cn(
+              "flex flex-col gap-3",
+              (!showFolders || selected) && "hidden md:flex",
+            )}
+          >
             <FolderSidebar
               userId={userId}
               tree={tree}
               notes={notes}
               selected={open}
-              onSelect={setFolder}
+              onSelect={(id) => {
+                setFolder(id);
+                setShowFolders(false);
+              }}
               selectedNoteId={selectedId}
               onOpenNote={setSelectedId}
             />
@@ -79,7 +104,7 @@ export function NotesClient({ userId }: { userId: string }) {
             folderId={open}
             selectedId={selectedId}
             onSelect={setSelectedId}
-            className={cn(selected && "hidden md:flex")}
+            className={cn((selected || showFolders) && "hidden md:flex")}
           />
 
           <div className={cn("min-w-0", !selected && "hidden md:block")}>
