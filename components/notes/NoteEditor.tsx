@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useEditor, EditorContent } from "@tiptap/react";
 import { StarterKit } from "@tiptap/starter-kit";
 import {
@@ -10,7 +10,13 @@ import {
   TableRow,
 } from "@tiptap/extension-table";
 import { ArrowLeft, Copy, Trash2 } from "lucide-react";
-import { deleteNote, duplicateNote, updateNote } from "@/lib/local/mutations";
+import { cn } from "@/lib/utils";
+import {
+  deleteNote,
+  duplicateNote,
+  updateNote,
+  type NotePatch,
+} from "@/lib/local/mutations";
 import type { NoteRecord } from "@/lib/local/types";
 import { EditorToolbar } from "./EditorToolbar";
 import { pasteGrid } from "./pasteGrid";
@@ -20,9 +26,20 @@ import type { FolderTreeNode } from "./folderTree";
 const EMPTY_DOC = { type: "doc", content: [{ type: "paragraph" }] };
 const AUTOSAVE_MS = 500;
 
+// Editor font-size preference, per device.
+const FONT_KEY = "note-font-size";
+type FontSize = "sm" | "base" | "lg";
+const FONT_SIZES: { key: FontSize; label: string; px: string }[] = [
+  { key: "sm", label: "Small text", px: "0.875rem" },
+  { key: "base", label: "Medium text", px: "1rem" },
+  { key: "lg", label: "Large text", px: "1.125rem" },
+];
+
 /**
- * Tiptap rich-text editor with tables. Content autosaves (debounced 500ms)
- * via the local mutation API — no network on the typing path.
+ * Tiptap rich-text editor with tables. Title and content autosave (debounced
+ * 500ms, one write) via the local mutation API — the title edits fully
+ * locally so the cursor never jumps, and nothing touches the network on the
+ * typing path. The font-size control is a per-device preference.
  */
 export function NoteEditor({
   note,
@@ -38,20 +55,45 @@ export function NoteEditor({
   const noteIdRef = useRef(note.id);
   noteIdRef.current = note.id;
 
-  // Pending autosave: { content } captured on update, flushed by the timer.
+  // The title edits locally (instant cursor) and autosaves with the content.
+  // Keyed per note id, so it re-initializes on note switches.
+  const [title, setTitle] = useState(note.title);
+
+  const [font, setFont] = useState<FontSize>(() => {
+    if (typeof window === "undefined") return "base";
+    const v = window.localStorage.getItem(FONT_KEY);
+    return v === "sm" || v === "lg" ? v : "base";
+  });
+
+  function chooseFont(next: FontSize) {
+    setFont(next);
+    try {
+      window.localStorage.setItem(FONT_KEY, next);
+    } catch {
+      // Private mode etc. — the toggle still works for this visit.
+    }
+  }
+
+  // Pending autosave patch ({ title } / { content }) captured on edit,
+  // flushed by the timer — one IndexedDB write per debounce window.
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pendingContent = useRef<unknown>(null);
+  const pendingPatch = useRef<NotePatch>({});
+
+  function queuePatch(patch: NotePatch) {
+    pendingPatch.current = { ...pendingPatch.current, ...patch };
+    if (saveTimer.current !== null) clearTimeout(saveTimer.current);
+    saveTimer.current = setTimeout(() => void flushSave(), AUTOSAVE_MS);
+  }
 
   async function flushSave(): Promise<void> {
     if (saveTimer.current !== null) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
-    if (pendingContent.current !== null) {
-      const content = pendingContent.current;
-      pendingContent.current = null;
-      await updateNote(noteIdRef.current, { content });
-    }
+    const patch = pendingPatch.current;
+    if (patch.title === undefined && patch.content === undefined) return;
+    pendingPatch.current = {};
+    await updateNote(noteIdRef.current, patch);
   }
 
   const editor = useEditor({
@@ -81,9 +123,7 @@ export function NoteEditor({
       },
     },
     onUpdate: ({ editor }) => {
-      pendingContent.current = editor.getJSON();
-      if (saveTimer.current !== null) clearTimeout(saveTimer.current);
-      saveTimer.current = setTimeout(flushSave, AUTOSAVE_MS);
+      queuePatch({ content: editor.getJSON() });
     },
   });
 
@@ -114,8 +154,11 @@ export function NoteEditor({
           <ArrowLeft className="h-4 w-4" />
         </button>
         <input
-          value={note.title}
-          onChange={(e) => void updateNote(note.id, { title: e.target.value })}
+          value={title}
+          onChange={(e) => {
+            setTitle(e.target.value);
+            queuePatch({ title: e.target.value });
+          }}
           placeholder="Title"
           className="h-9 min-w-[8rem] flex-1 rounded-lg border border-[var(--border)] bg-[var(--card)] px-3 text-sm font-semibold outline-none focus:border-[var(--color-check)]"
         />
@@ -175,9 +218,40 @@ export function NoteEditor({
         </button>
       </div>
 
-      <EditorToolbar editor={editor} />
+      <div className="flex flex-wrap items-center gap-2">
+        <EditorToolbar editor={editor} />
+        <div
+          role="group"
+          aria-label="Font size"
+          title="Font size"
+          className="flex rounded-lg border border-[var(--border)] bg-[var(--card)] p-0.5"
+        >
+          {FONT_SIZES.map((f, i) => (
+            <button
+              key={f.key}
+              onClick={() => chooseFont(f.key)}
+              title={f.label}
+              aria-label={f.label}
+              className={cn(
+                "rounded-md px-2 py-1 font-semibold transition-colors",
+                i === 0 && "text-xs",
+                i === 1 && "text-sm",
+                i === 2 && "text-base",
+                font === f.key
+                  ? "bg-[var(--color-check-soft)] text-[var(--color-check)]"
+                  : "text-[var(--muted)] hover:bg-black/5",
+              )}
+            >
+              A
+            </button>
+          ))}
+        </div>
+      </div>
 
-      <div className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3">
+      <div
+        className="rounded-xl border border-[var(--border)] bg-[var(--card)] p-3"
+        style={{ fontSize: FONT_SIZES.find((f) => f.key === font)?.px }}
+      >
         <EditorContent editor={editor} />
       </div>
     </div>
