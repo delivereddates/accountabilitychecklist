@@ -1,5 +1,6 @@
 import { getDb } from "./db";
 import { flushNow } from "./sync";
+import { clearLocalUserId } from "./user-id";
 
 /**
  * Wipe all local-first data (called on logout, right after the checklist's
@@ -35,4 +36,5 @@ export async function resetLocalData(): Promise<void> {
   } catch {
     // Storage unavailable (private mode) — nothing to clear.
   }
+  clearLocalUserId();
 }

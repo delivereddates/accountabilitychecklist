@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { CloudOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useStorageAvailable, useTodos } from "@/lib/local/hooks";
+import { useLocalUserId, useStorageAvailable, useTodos } from "@/lib/local/hooks";
 import type { TodoRecord } from "@/lib/local/types";
 import { TodoForm } from "./TodoForm";
 import { TodoList } from "./TodoList";
@@ -11,7 +11,8 @@ import { TodoTree } from "./TodoTree";
 
 type View = "list" | "tree";
 
-export function TodosClient({ userId }: { userId: string }) {
+export function TodosClient() {
+  const userId = useLocalUserId();
   const todos = useTodos(userId);
   const storageOk = useStorageAvailable();
   const [view, setView] = useState<View>("list");
@@ -22,6 +23,10 @@ export function TodosClient({ userId }: { userId: string }) {
     [sorted],
   );
   const openCount = sorted.filter((t) => !t.completed).length;
+
+  if (!userId) {
+    return <p className="text-sm text-[var(--muted)]">Loading…</p>;
+  }
 
   return (
     <div className="mx-auto max-w-3xl">

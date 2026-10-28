@@ -1,8 +1,8 @@
-import { currentUserId } from "@/lib/auth-server";
 import { TodosClient } from "@/components/todos/TodosClient";
 
-export default async function TodosPage() {
-  const userId = await currentUserId();
-  if (!userId) return null; // middleware guarantees a session; defensive
-  return <TodosClient userId={userId} />;
+// Static shell: TodosClient resolves the user id client-side (localStorage
+// cache + /api/me), so this page prerenders and the navbar link prefetches
+// fully — switching sections never waits on a server render.
+export default function TodosPage() {
+  return <TodosClient />;
 }

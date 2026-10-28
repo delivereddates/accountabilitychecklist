@@ -4,7 +4,12 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CloudOff, FolderTree } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useFolders, useNotes, useStorageAvailable } from "@/lib/local/hooks";
+import {
+  useFolders,
+  useLocalUserId,
+  useNotes,
+  useStorageAvailable,
+} from "@/lib/local/hooks";
 import { FolderSidebar } from "./FolderSidebar";
 import { buildFolderTree } from "./folderTree";
 import { NoteList } from "./NoteList";
@@ -19,7 +24,8 @@ import { NoteEditor } from "./NoteEditor";
  * list to that level. `?id=` deep-links a note (used by the calendar
  * agenda).
  */
-export function NotesClient({ userId }: { userId: string }) {
+export function NotesClient() {
+  const userId = useLocalUserId();
   const notes = useNotes(userId);
   const folders = useFolders(userId);
   const storageOk = useStorageAvailable();
@@ -43,6 +49,15 @@ export function NotesClient({ userId }: { userId: string }) {
 
   const selected =
     (notes ?? []).find((n) => n.id === selectedId) ?? null;
+
+  if (!userId) {
+    return (
+      <div className="mx-auto max-w-6xl">
+        <h1 className="mb-4 text-lg font-semibold tracking-tight">Notes</h1>
+        <p className="text-sm text-[var(--muted)]">Loading…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto max-w-6xl">

@@ -1,14 +1,14 @@
 import { Suspense } from "react";
-import { currentUserId } from "@/lib/auth-server";
 import { CalendarClient } from "@/components/calendar/CalendarClient";
 import { Spinner } from "@/components/summary/WeekTab";
 
-export default async function CalendarPage() {
-  const userId = await currentUserId();
-  if (!userId) return null; // middleware guarantees a session; defensive
+// Static shell: CalendarClient resolves the user id client-side (localStorage
+// cache + /api/me), so this page prerenders and the navbar link prefetches
+// fully — switching sections never waits on a server render.
+export default function CalendarPage() {
   return (
     <Suspense fallback={<Spinner />}>
-      <CalendarClient userId={userId} />
+      <CalendarClient />
     </Suspense>
   );
 }

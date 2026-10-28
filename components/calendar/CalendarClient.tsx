@@ -9,6 +9,7 @@ import { cn, fromISODate, toISODate } from "@/lib/utils";
 import { monthDays, weekDays } from "@/lib/dates";
 import {
   useEvents,
+  useLocalUserId,
   useNotes,
   useStorageAvailable,
   useTodos,
@@ -24,7 +25,8 @@ type View = "month" | "week" | "agenda";
 
 const AGENDA_DAYS = 30;
 
-export function CalendarClient({ userId }: { userId: string }) {
+export function CalendarClient() {
+  const userId = useLocalUserId();
   const searchParams = useSearchParams();
   const events = useEvents(userId);
   const todos = useTodos(userId);
@@ -97,6 +99,10 @@ export function CalendarClient({ userId }: { userId: string }) {
     view === "week"
       ? `${format(parseISO(week[0]), "d MMM")} – ${format(parseISO(week[6]), "d MMM yyyy")}`
       : format(parseISO(anchor), view === "month" ? "MMMM yyyy" : "d MMM yyyy");
+
+  if (!userId) {
+    return <p className="text-sm text-[var(--muted)]">Loading…</p>;
+  }
 
   return (
     <div className="mx-auto max-w-5xl">
