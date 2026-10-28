@@ -10,14 +10,11 @@ import { resetCoordinator } from "@/lib/swr-mutations";
 import { resetLocalData } from "@/lib/local/reset";
 
 // Single-letter labels keep the bar compact on phones; the full name shows
-// on hover/long-press via title, and screen readers use aria-label. The
-// productivity sections (T/C/N) sit after a divider — add C and N links when
-// those routes land.
+// on hover/long-press via title, and screen readers use aria-label. Daily is
+// the home; Week/Month/Year live in the accountability sidebar (see
+// components/summary/SummarySidebar) — this bar switches sections only.
 const LINKS: { href: string; label: string; aria: string; sepBefore?: boolean }[] = [
   { href: "/", label: "D", aria: "Daily" },
-  { href: "/week", label: "W", aria: "Week" },
-  { href: "/month", label: "M", aria: "Month" },
-  { href: "/year", label: "Y", aria: "Year" },
   { href: "/todos", label: "T", aria: "Todos", sepBefore: true },
   { href: "/calendar", label: "C", aria: "Calendar" },
   { href: "/notes", label: "N", aria: "Notes" },

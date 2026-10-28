@@ -4,7 +4,7 @@ import { useEffect } from "react";
 import { Loader2 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { DailyEditor } from "./DailyEditor";
-import { useDashboard } from "@/lib/use-dashboard";
+import { useDashboard, type DashboardData } from "@/lib/use-dashboard";
 import { useMutations, resyncWhenIdle } from "@/lib/swr-mutations";
 import { toISODate } from "@/lib/utils";
 
@@ -12,19 +12,28 @@ const DATE_RE = /^\d{4}-\d{2}-\d{2}$/;
 
 /**
  * Daily is fully client-side: today/date are computed in the browser (native
- * timezone), and it reads from the shared SWR cache (seeded by the layout) — so
- * there's no per-Daily server fetch, no spinner, and no flash. Returning to
- * Daily asks the coordinator to re-fetch once it's idle (never clobbering
- * in-flight writes).
+ * timezone), and it reads from the shared SWR cache — seeded by the page's
+ * SSR fetch (initialData) or by the layout's DataLoader, so there's no
+ * per-Daily server fetch, no spinner, and no flash. Returning to Daily asks
+ * the coordinator to re-fetch once it's idle (never clobbering in-flight
+ * writes).
  */
-export function DailyClient({ currentUserId }: { currentUserId: string }) {
+export function DailyClient({
+  currentUserId,
+  initialData,
+}: {
+  currentUserId: string;
+  initialData?: DashboardData;
+}) {
   const params = useSearchParams();
   const todayISO = toISODate(new Date());
   const dateParam = params.get("date");
   const selectedDate =
     dateParam && DATE_RE.test(dateParam) ? dateParam : todayISO;
 
-  const { data } = useDashboard();
+  const { data } = useDashboard(
+    initialData ? { fallbackData: initialData } : undefined,
+  );
   const mutations = useMutations();
 
   useEffect(() => {
