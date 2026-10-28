@@ -6,23 +6,29 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  Inbox,
   Pencil,
   Plus,
   Trash2,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { createFolder, deleteFolder, renameFolder } from "@/lib/local/mutations";
+import {
+  createFolder,
+  createNote,
+  deleteFolder,
+  renameFolder,
+} from "@/lib/local/mutations";
 import type { NoteRecord } from "@/lib/local/types";
 import type { FolderTree, FolderTreeNode } from "./folderTree";
 
 /**
- * Folder tree in the sidebar — the notes home page. Leads with "Unfiled"
- * (notes without a folder); expanding a folder reveals its contents inline —
- * subfolders first, then the notes directly inside it (click a note to open
- * it in the editor). Clicking a folder's name selects it, which scopes the
- * note-list column to that level, and opens it if it was collapsed. Row
- * counts roll up the whole subtree. Deleting a folder keeps its notes (they
- * become unfiled) and moves its subfolders up one level.
+ * The notes home page — one tree, no separate list view. Unfiled notes sit
+ * at the base level under an expandable "Unfiled" row; expanding a folder
+ * reveals its contents inline (subfolders first, then the notes directly
+ * inside it). Clicking a folder's name selects it — that's where the "New
+ * note" button files the note — and opens it if it was collapsed. Row counts
+ * roll up the whole subtree. Deleting a folder keeps its notes (they become
+ * unfiled) and moves its subfolders up one level.
  */
 export function FolderSidebar({
   userId,
@@ -65,7 +71,23 @@ export function FolderSidebar({
     return count;
   };
   tree.roots.forEach(rollUp);
-  const unfiled = notes.filter((n) => !n.folderId).length;
+  const unfiledNotes = notes
+    .filter((n) => !n.folderId)
+    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const unfiledOpen = !collapsed.has("unfiled");
+
+  // New note goes into the selected folder (or Unfiled), which expands so
+  // the note is visible in the tree when the editor closes.
+  async function addNote() {
+    const target = selected === "unfiled" ? null : selected;
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.delete(selected);
+      return next;
+    });
+    const id = await createNote(userId, target);
+    if (id) onOpenNote(id);
+  }
 
   function commitAdd(parentId: string | null) {
     const name = newName.trim();
@@ -239,19 +261,53 @@ export function FolderSidebar({
   }
 
   return (
-    <aside className="flex w-full flex-col gap-0.5 md:w-44">
+    <aside className="flex w-full flex-col gap-0.5 md:w-64">
       <button
-        onClick={() => onSelect("unfiled")}
-        className={cn(
-          "flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
-          selected === "unfiled"
-            ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
-            : "text-[var(--muted)] hover:bg-black/5",
-        )}
+        onClick={() => void addNote()}
+        className="mb-2 inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-lg bg-[var(--color-check)] text-sm font-semibold text-white"
       >
-        Unfiled
-        <span className="ml-auto text-xs tabular-nums">{unfiled}</span>
+        <Plus className="h-4 w-4" />
+        New note
       </button>
+
+      <div>
+        <div className="flex items-center gap-0.5">
+          <button
+            onClick={() => unfiledNotes.length > 0 && toggle("unfiled")}
+            title={unfiledOpen ? "Collapse" : "Expand"}
+            className={cn(
+              "flex h-5 w-4 shrink-0 items-center justify-center text-[var(--muted)]",
+              unfiledNotes.length === 0 && "invisible",
+            )}
+          >
+            <ChevronRight
+              className={cn(
+                "h-3 w-3 transition-transform",
+                unfiledNotes.length > 0 && unfiledOpen && "rotate-90",
+              )}
+            />
+          </button>
+          <button
+            onClick={() => {
+              onSelect("unfiled");
+              if (!unfiledOpen && unfiledNotes.length > 0) toggle("unfiled");
+            }}
+            className={cn(
+              "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
+              selected === "unfiled"
+                ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
+                : "text-[var(--muted)] hover:bg-black/5",
+            )}
+          >
+            <Inbox className="h-3.5 w-3.5 shrink-0" />
+            <span className="min-w-0 truncate">Unfiled</span>
+            <span className="ml-auto text-xs tabular-nums">
+              {unfiledNotes.length}
+            </span>
+          </button>
+        </div>
+        {unfiledOpen && unfiledNotes.map((n) => renderNote(n, 0))}
+      </div>
 
       {tree.roots.map(renderNode)}
 

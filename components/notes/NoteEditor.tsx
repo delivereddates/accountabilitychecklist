@@ -153,8 +153,8 @@ export function NoteEditor({
       <div className="flex flex-wrap items-center gap-2">
         <button
           onClick={onBack}
-          title="Back to list"
-          aria-label="Back to list"
+          title="Back to notes"
+          aria-label="Back to notes"
           className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-black/5 md:hidden"
         >
           <ArrowLeft className="h-4 w-4" />
