@@ -4,7 +4,7 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { addDays, addMonths, addWeeks, format, parseISO } from "date-fns";
-import { CalendarPlus } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ChevronRight } from "lucide-react";
 import { cn, fromISODate, toISODate } from "@/lib/utils";
 import { monthDays, weekDays } from "@/lib/dates";
 import {
@@ -15,7 +15,6 @@ import {
   useTodos,
 } from "@/lib/local/hooks";
 import { buildDayFeed, buildRangeFeeds } from "@/lib/local/unified";
-import { DateStepper } from "@/components/summary/DateStepper";
 import { MonthGrid } from "./MonthGrid";
 import { WeekView } from "./WeekView";
 import { AgendaList } from "./AgendaList";
@@ -74,30 +73,26 @@ export function CalendarClient() {
     [agendaRange, data],
   );
 
-  function step(dir: 1 | -1) {
-    const base = fromISODate(anchor);
-    const next =
-      view === "month"
-        ? addMonths(base, dir)
-        : view === "week"
-          ? addWeeks(base, dir)
-          : addWeeks(base, dir);
-    const iso = toISODate(next);
+  function jump(iso: string) {
     setAnchor(iso);
     setSelected(null);
     window.history.replaceState(null, "", `?date=${iso}`);
   }
 
-  function goToday() {
-    setAnchor(today);
-    setSelected(null);
-    window.history.replaceState(null, "", "?date=" + today);
+  function step(dir: 1 | -1) {
+    const base = fromISODate(anchor);
+    const next = view === "month" ? addMonths(base, dir) : addWeeks(base, dir);
+    jump(toISODate(next));
   }
 
   const loading = events === undefined || todos === undefined || notes === undefined;
+  // Week title skips the year unless the week straddles New Year's — it has
+  // to fit between the chevrons on a phone.
+  const sameYear =
+    parseISO(week[0]).getFullYear() === parseISO(week[6]).getFullYear();
   const title =
     view === "week"
-      ? `${format(parseISO(week[0]), "d MMM")} – ${format(parseISO(week[6]), "d MMM yyyy")}`
+      ? `${format(parseISO(week[0]), "d MMM")} – ${format(parseISO(week[6]), sameYear ? "d MMM" : "d MMM yyyy")}`
       : format(parseISO(anchor), view === "month" ? "MMMM yyyy" : "d MMM yyyy");
 
   if (!userId) {
@@ -106,40 +101,46 @@ export function CalendarClient() {
 
   return (
     <div className="mx-auto max-w-5xl">
-      <header className="mb-4 flex flex-wrap items-center gap-2">
-        <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
-        <span className="text-sm text-[var(--muted)]">{title}</span>
-        <div className="ml-auto flex items-center gap-2">
+      <h1 className="sr-only">Calendar</h1>
+      <header className="mb-3 flex flex-col gap-2 md:mb-4 md:flex-row md:items-center">
+        {/* Row 1: ‹ period title (tap to pick a date) › */}
+        <div className="flex min-w-0 items-center gap-1.5 md:flex-1">
           <button
-            onClick={goToday}
-            className="h-9 rounded-lg border border-[var(--border)] px-2.5 text-sm text-[var(--muted)] hover:bg-black/5"
+            onClick={() => step(-1)}
+            aria-label="Previous"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-black/5"
           >
-            Today
+            <ChevronLeft className="h-4 w-4" />
           </button>
+          <label
+            className="flex h-9 min-w-0 flex-1 cursor-pointer items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-center text-base font-semibold tracking-tight md:justify-start md:px-3"
+            title="Pick a date"
+          >
+            <span className="truncate">{title}</span>
+            <input
+              type="date"
+              value={anchor}
+              onChange={(e) => e.target.value && jump(e.target.value)}
+              className="sr-only"
+            />
+          </label>
           <button
-            onClick={() => setDialog({ date: anchor, startMin: null })}
-            className="inline-flex h-9 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-sm font-semibold text-white"
+            onClick={() => step(1)}
+            aria-label="Next"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-black/5"
           >
-            <CalendarPlus className="h-4 w-4" />
-            Event
+            <ChevronRight className="h-4 w-4" />
           </button>
-          <DateStepper
-            value={anchor}
-            onChange={(iso) => {
-              setAnchor(iso);
-              setSelected(null);
-              window.history.replaceState(null, "", `?date=${iso}`);
-            }}
-            onPrev={() => step(-1)}
-            onNext={() => step(1)}
-          />
-          <div className="flex rounded-lg border border-[var(--border)] p-0.5 text-sm">
+        </div>
+        {/* Row 2: view toggle + Today + Event */}
+        <div className="flex items-center gap-2">
+          <div className="flex rounded-lg border border-[var(--border)] p-0.5 text-xs sm:text-sm">
             {(["month", "week", "agenda"] as View[]).map((v) => (
               <button
                 key={v}
                 onClick={() => setView(v)}
                 className={cn(
-                  "rounded-md px-2.5 py-1 capitalize transition-colors",
+                  "rounded-md px-2 py-1 capitalize transition-colors sm:px-2.5",
                   view === v
                     ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
                     : "text-[var(--muted)]",
@@ -149,6 +150,19 @@ export function CalendarClient() {
               </button>
             ))}
           </div>
+          <button
+            onClick={() => jump(today)}
+            className="ml-auto h-8 rounded-lg border border-[var(--border)] px-2.5 text-sm text-[var(--muted)] hover:bg-black/5"
+          >
+            Today
+          </button>
+          <button
+            onClick={() => setDialog({ date: anchor, startMin: null })}
+            className="inline-flex h-8 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-sm font-semibold text-white"
+          >
+            <CalendarPlus className="h-4 w-4" />
+            Event
+          </button>
         </div>
       </header>
 
