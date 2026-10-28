@@ -16,12 +16,13 @@ import type { NoteRecord } from "@/lib/local/types";
 import type { FolderTree, FolderTreeNode } from "./folderTree";
 
 /**
- * Folder tree in the sidebar. Expanding a folder reveals its contents
- * inline — subfolders first, then the notes directly inside it (click a
- * note to open it in the editor). Clicking a folder's name selects it,
- * which scopes the note-list column to that level, and opens it if it was
- * collapsed. Row counts roll up the whole subtree. Deleting a folder keeps
- * its notes (they become unfiled) and moves its subfolders up one level.
+ * Folder tree in the sidebar — the notes home page. Leads with "Unfiled"
+ * (notes without a folder); expanding a folder reveals its contents inline —
+ * subfolders first, then the notes directly inside it (click a note to open
+ * it in the editor). Clicking a folder's name selects it, which scopes the
+ * note-list column to that level, and opens it if it was collapsed. Row
+ * counts roll up the whole subtree. Deleting a folder keeps its notes (they
+ * become unfiled) and moves its subfolders up one level.
  */
 export function FolderSidebar({
   userId,
@@ -35,8 +36,8 @@ export function FolderSidebar({
   userId: string;
   tree: FolderTree;
   notes: NoteRecord[];
-  selected: string | "all";
-  onSelect: (folderId: string | "all") => void;
+  selected: string | "unfiled";
+  onSelect: (folderId: string | "unfiled") => void;
   selectedNoteId: string | null;
   onOpenNote: (id: string) => void;
 }) {
@@ -240,25 +241,19 @@ export function FolderSidebar({
   return (
     <aside className="flex w-full flex-col gap-0.5 md:w-44">
       <button
-        onClick={() => onSelect("all")}
+        onClick={() => onSelect("unfiled")}
         className={cn(
           "flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
-          selected === "all"
+          selected === "unfiled"
             ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
             : "text-[var(--muted)] hover:bg-black/5",
         )}
       >
-        All notes
-        <span className="ml-auto text-xs tabular-nums">{notes.length}</span>
+        Unfiled
+        <span className="ml-auto text-xs tabular-nums">{unfiled}</span>
       </button>
 
       {tree.roots.map(renderNode)}
-
-      <div className="mt-1 flex items-center gap-1 text-xs text-[var(--muted)]">
-        <span className="rounded bg-black/[0.03] px-1.5 py-0.5">
-          {unfiled} unfiled
-        </span>
-      </div>
 
       {addingAt === "root" ? (
         <NewFolderInput

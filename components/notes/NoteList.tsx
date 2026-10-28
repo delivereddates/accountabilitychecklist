@@ -6,7 +6,7 @@ import { cn } from "@/lib/utils";
 import { createNote } from "@/lib/local/mutations";
 import type { NoteRecord } from "@/lib/local/types";
 
-/** Middle column: notes in the selected folder (or all), newest first. */
+/** Middle column: notes in the selected folder (or Unfiled), newest first. */
 export function NoteList({
   userId,
   notes,
@@ -17,7 +17,7 @@ export function NoteList({
 }: {
   userId: string;
   notes: NoteRecord[];
-  folderId: string | "all";
+  folderId: string | "unfiled";
   selectedId: string | null;
   onSelect: (id: string) => void;
   className?: string;
@@ -25,7 +25,7 @@ export function NoteList({
   const sorted = [...notes].sort((a, b) => b.updatedAt - a.updatedAt);
 
   async function addNote() {
-    const id = await createNote(userId, folderId === "all" ? null : folderId);
+    const id = await createNote(userId, folderId === "unfiled" ? null : folderId);
     onSelect(id);
   }
 

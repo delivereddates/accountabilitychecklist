@@ -16,13 +16,12 @@ import { NoteList } from "./NoteList";
 import { NoteEditor } from "./NoteEditor";
 
 /**
- * Three-pane notes layout (folders / list / editor) on md+. On phones it's a
- * master-detail swap: the folder sidebar is hidden behind a header toggle
- * (and always hidden once a note is open), picking a folder returns to the
- * note list. The sidebar tree shows each folder's contents inline
- * (subfolders + notes) when expanded; selecting a folder scopes the note
- * list to that level. `?id=` deep-links a note (used by the calendar
- * agenda).
+ * Three-pane notes layout (folders / list / editor) on md+. The folder tree
+ * is the single entry point — there is no flat "all notes" page; the tree
+ * leads with an "Unfiled" row for notes without a folder. On phones it's a
+ * master-detail swap: the folder page shows first, picking a folder (or
+ * Unfiled) swaps to that note list, opening a note swaps to the editor.
+ * `?id=` deep-links a note (used by the calendar agenda).
  */
 export function NotesClient() {
   const userId = useLocalUserId();
@@ -31,19 +30,20 @@ export function NotesClient() {
   const storageOk = useStorageAvailable();
   const searchParams = useSearchParams();
 
-  const [folder, setFolder] = useState<string | "all">("all");
+  const [folder, setFolder] = useState<string | "unfiled">("unfiled");
   const paramId = searchParams.get("id");
   const [selectedId, setSelectedId] = useState<string | null>(paramId);
-  // Phones only: folder panel is opt-in (desktop always shows the rail).
-  const [showFolders, setShowFolders] = useState(false);
+  // Phones only: the folder page is the home view (desktop always shows the
+  // rail), and the header toggle brings it back after drilling in.
+  const [showFolders, setShowFolders] = useState(true);
 
   const tree = useMemo(() => buildFolderTree(folders ?? []), [folders]);
-  // A deleted (or mid-sync) selection browses All notes until re-picked.
+  // A deleted (or mid-sync) selection browses Unfiled until re-picked.
   const open =
-    folder !== "all" && tree.byId.has(folder) ? folder : ("all" as const);
+    folder !== "unfiled" && tree.byId.has(folder) ? folder : ("unfiled" as const);
   const visibleNotes = useMemo(() => {
     const all = notes ?? [];
-    if (open === "all") return all;
+    if (open === "unfiled") return all.filter((n) => !n.folderId);
     return all.filter((n) => n.folderId === open);
   }, [notes, open]);
 
