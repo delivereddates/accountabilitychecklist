@@ -1,21 +1,16 @@
 import { Suspense } from "react";
 import { DailyClient } from "@/components/daily/DailyClient";
-import { currentUserId } from "@/lib/auth-server";
-import { getDashboardAll } from "@/lib/db";
 
 /**
- * The dashboard dataset is fetched here, during SSR, and seeds the SWR cache
- * (fallbackData) — first paint already has the checklist, no client fetch
- * waterfall. DataLoader still revalidates in the background once hydrated.
+ * Statically prerendered like the other tabs: DailyClient resolves the user
+ * client-side and reads the shared SWR dashboard cache (seeded by the
+ * layout's DataLoader), so the navbar's D link fully prefetches the page —
+ * tapping in is instant with no server round trip.
  */
-export default async function DailyPage() {
-  const [userId, data] = await Promise.all([
-    currentUserId(),
-    getDashboardAll(),
-  ]);
+export default function DailyPage() {
   return (
     <Suspense fallback={null}>
-      <DailyClient currentUserId={userId ?? ""} initialData={data} />
+      <DailyClient />
     </Suspense>
   );
 }
