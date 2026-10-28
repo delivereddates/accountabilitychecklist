@@ -373,3 +373,29 @@ export async function deleteNote(id: string): Promise<void> {
   });
   schedulePush();
 }
+
+/**
+ * Copy a note with a fresh id — same folder, date, and content, title gains
+ * a " (copy)" suffix (re-duplicating a copy doesn't stack suffixes).
+ */
+export async function duplicateNote(id: string): Promise<string | null> {
+  const db = getDb();
+  const src = await db.notes.get(id);
+  if (!src || src.deleted) return null;
+  const copyId = newId();
+  const now = nowMs();
+  const copy: NoteRecord = {
+    ...src,
+    id: copyId,
+    title: src.title ? `${src.title.replace(/ \(copy\)$/, "")} (copy)` : "",
+    createdAt: now,
+    updatedAt: now,
+    deleted: false,
+  };
+  await db.transaction("rw", db.notes, db.outbox, async () => {
+    await db.notes.put(copy);
+    await queue(db, "notes", copyId);
+  });
+  schedulePush();
+  return copyId;
+}

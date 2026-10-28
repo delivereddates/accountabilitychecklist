@@ -89,6 +89,7 @@ export function NotesClient({ userId }: { userId: string }) {
                 note={selected}
                 folderOptions={tree.order}
                 onBack={() => setSelectedId(null)}
+                onOpenNote={setSelectedId}
               />
             ) : (
               <p className="pt-16 text-center text-sm text-[var(--muted)]">

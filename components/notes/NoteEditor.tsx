@@ -9,8 +9,8 @@ import {
   TableHeader,
   TableRow,
 } from "@tiptap/extension-table";
-import { ArrowLeft, Trash2 } from "lucide-react";
-import { deleteNote, updateNote } from "@/lib/local/mutations";
+import { ArrowLeft, Copy, Trash2 } from "lucide-react";
+import { deleteNote, duplicateNote, updateNote } from "@/lib/local/mutations";
 import type { NoteRecord } from "@/lib/local/types";
 import { EditorToolbar } from "./EditorToolbar";
 import { pasteGrid } from "./pasteGrid";
@@ -28,10 +28,12 @@ export function NoteEditor({
   note,
   folderOptions,
   onBack,
+  onOpenNote,
 }: {
   note: NoteRecord;
   folderOptions: FolderTreeNode[];
   onBack: () => void;
+  onOpenNote: (id: string) => void;
 }) {
   const noteIdRef = useRef(note.id);
   noteIdRef.current = note.id;
@@ -40,16 +42,15 @@ export function NoteEditor({
   const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingContent = useRef<unknown>(null);
 
-  function flushSave() {
+  async function flushSave(): Promise<void> {
     if (saveTimer.current !== null) {
       clearTimeout(saveTimer.current);
       saveTimer.current = null;
     }
     if (pendingContent.current !== null) {
-      void updateNote(noteIdRef.current, {
-        content: pendingContent.current,
-      });
+      const content = pendingContent.current;
       pendingContent.current = null;
+      await updateNote(noteIdRef.current, { content });
     }
   }
 
@@ -90,7 +91,7 @@ export function NoteEditor({
   // without emitting an update.
   useEffect(() => {
     if (!editor || editor.isDestroyed) return;
-    flushSave();
+    void flushSave();
     editor.commands.setContent(
       (note.content as object) ?? EMPTY_DOC,
       { emitUpdate: false },
@@ -99,7 +100,7 @@ export function NoteEditor({
   }, [note.id, editor]);
 
   // Flush on unmount too (navigating away mid-debounce).
-  useEffect(() => flushSave, []);
+  useEffect(() => () => void flushSave(), []);
 
   return (
     <div className="flex min-w-0 flex-1 flex-col gap-2">
@@ -148,6 +149,19 @@ export function NoteEditor({
             className="bg-transparent text-[var(--muted)] outline-none"
           />
         </label>
+        <button
+          onClick={async () => {
+            // Flush the debounce first so the copy includes the latest edits.
+            await flushSave();
+            const id = await duplicateNote(note.id);
+            if (id) onOpenNote(id);
+          }}
+          title="Duplicate note"
+          aria-label="Duplicate note"
+          className="inline-flex h-9 w-9 items-center justify-center rounded-lg border border-[var(--border)] text-[var(--muted)] hover:bg-black/5"
+        >
+          <Copy className="h-4 w-4" />
+        </button>
         <button
           onClick={() => {
             if (window.confirm("Delete this note?")) void deleteNote(note.id);
