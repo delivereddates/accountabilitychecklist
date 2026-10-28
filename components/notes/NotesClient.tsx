@@ -12,9 +12,10 @@ import { NoteEditor } from "./NoteEditor";
 
 /**
  * Three-pane notes layout (folders / list / editor) on md+, master-detail
- * swap on phones. Selecting a folder opens it — the list shows the notes at
- * that level (not the subtree). `?id=` deep-links a note (used by the
- * calendar agenda).
+ * swap on phones. The sidebar tree shows each folder's contents inline
+ * (subfolders + notes) when expanded; selecting a folder scopes the note
+ * list to that level. `?id=` deep-links a note (used by the calendar
+ * agenda).
  */
 export function NotesClient({ userId }: { userId: string }) {
   const notes = useNotes(userId);
@@ -67,6 +68,8 @@ export function NotesClient({ userId }: { userId: string }) {
               notes={notes}
               selected={open}
               onSelect={setFolder}
+              selectedNoteId={selectedId}
+              onOpenNote={setSelectedId}
             />
           </div>
 
