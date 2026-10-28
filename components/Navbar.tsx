@@ -5,6 +5,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, Settings } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Logo } from "@/components/Logo";
+import { SyncStatus } from "@/components/SyncStatus";
 import { resetCoordinator } from "@/lib/swr-mutations";
 import { resetLocalData } from "@/lib/local/reset";
 
@@ -80,14 +81,17 @@ export function Navbar() {
           })}
         </nav>
 
-        <button
-          onClick={handleLogout}
-          title="Log Out"
-          aria-label="Log Out"
-          className="ml-auto inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)] transition-colors hover:bg-black/5"
-        >
-          <LogOut className="h-4 w-4" />
-        </button>
+        <div className="ml-auto flex items-center gap-2">
+          <SyncStatus />
+          <button
+            onClick={handleLogout}
+            title="Log Out"
+            aria-label="Log Out"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-md border border-[var(--border)] transition-colors hover:bg-black/5"
+          >
+            <LogOut className="h-4 w-4" />
+          </button>
+        </div>
       </div>
     </header>
   );

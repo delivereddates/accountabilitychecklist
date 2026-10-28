@@ -11,12 +11,10 @@ import {
   useEvents,
   useNotes,
   useStorageAvailable,
-  useSyncStatus,
   useTodos,
 } from "@/lib/local/hooks";
 import { buildDayFeed, buildRangeFeeds } from "@/lib/local/unified";
 import { DateStepper } from "@/components/summary/DateStepper";
-import { SyncDot } from "@/components/todos/TodosClient";
 import { MonthGrid } from "./MonthGrid";
 import { WeekView } from "./WeekView";
 import { AgendaList } from "./AgendaList";
@@ -32,7 +30,6 @@ export function CalendarClient({ userId }: { userId: string }) {
   const todos = useTodos(userId);
   const notes = useNotes(userId);
   const storageOk = useStorageAvailable();
-  const sync = useSyncStatus();
 
   const [view, setView] = useState<View>("month");
   const paramDate = searchParams.get("date");
@@ -107,7 +104,6 @@ export function CalendarClient({ userId }: { userId: string }) {
         <h1 className="text-lg font-semibold tracking-tight">Calendar</h1>
         <span className="text-sm text-[var(--muted)]">{title}</span>
         <div className="ml-auto flex items-center gap-2">
-          <SyncDot pending={sync.pending} error={sync.error} />
           <button
             onClick={goToday}
             className="h-9 rounded-lg border border-[var(--border)] px-2.5 text-sm text-[var(--muted)] hover:bg-black/5"

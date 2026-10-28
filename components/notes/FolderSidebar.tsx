@@ -15,9 +15,12 @@ import type { NoteRecord } from "@/lib/local/types";
 import type { FolderTree, FolderTreeNode } from "./folderTree";
 
 /**
- * Folder tree with inline add / rename (blur-commit) and delete-with-confirm.
- * Deleting a folder keeps its notes (they become unfiled) and moves its
- * subfolders up one level. Counts include everything in the subtree.
+ * File-browser folder navigation: clicking a folder opens it. The sidebar
+ * shows a breadcrumb trail plus the subfolders at that level, and the note
+ * list (driven by the same selection) shows the notes at that level. Counts
+ * are direct notes only — what you see when you open the folder. Deleting a
+ * folder keeps its notes (they become unfiled) and moves its subfolders up
+ * one level.
  */
 export function FolderSidebar({
   userId,
@@ -32,26 +35,36 @@ export function FolderSidebar({
   selected: string | "all";
   onSelect: (folderId: string | "all") => void;
 }) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  // null = not adding; "root" or a folder id = where the new folder goes.
+  // null = not adding; "here" = child of the open folder, or a folder id.
   const [addingAt, setAddingAt] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
-  // Direct note count per folder id, rolled up over the tree.
-  const direct = new Map<string, number>();
-  for (const n of notes) {
-    if (n.folderId) direct.set(n.folderId, (direct.get(n.folderId) ?? 0) + 1);
+  // A stale selection (folder deleted elsewhere / mid-sync) browses the root.
+  const open = selected === "all" ? null : (tree.byId.get(selected) ?? null);
+
+  // Breadcrumb path: root → … → open folder. Raw parentId can cycle after
+  // an unlucky LWW merge, so the walk carries a visited set.
+  const path: FolderTreeNode[] = [];
+  if (open) {
+    const seen = new Set<string>();
+    let node: FolderTreeNode | null = open;
+    while (node && !seen.has(node.folder.id)) {
+      seen.add(node.folder.id);
+      path.unshift(node);
+      node = node.folder.parentId
+        ? (tree.byId.get(node.folder.parentId) ?? null)
+        : null;
+    }
   }
-  const totals = new Map<string, number>();
-  const rollUp = (node: FolderTreeNode): number => {
-    let count = direct.get(node.folder.id) ?? 0;
-    for (const child of node.children) count += rollUp(child);
-    totals.set(node.folder.id, count);
-    return count;
-  };
-  tree.roots.forEach(rollUp);
+
+  const level = open ? open.children : tree.roots;
+
+  const counts = new Map<string, number>();
+  for (const n of notes) {
+    if (n.folderId) counts.set(n.folderId, (counts.get(n.folderId) ?? 0) + 1);
+  }
   const unfiled = notes.filter((n) => !n.folderId).length;
 
   function commitAdd(parentId: string | null) {
@@ -61,43 +74,13 @@ export function FolderSidebar({
     if (name) void createFolder(userId, name, parentId);
   }
 
-  function toggle(id: string) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
-  function renderNode(node: FolderTreeNode): React.ReactNode {
+  function renderRow(node: FolderTreeNode): React.ReactNode {
     const f = node.folder;
-    const hasChildren = node.children.length > 0;
-    const isCollapsed = collapsed.has(f.id);
     const renaming = renamingId === f.id;
 
     return (
       <div key={f.id}>
-        <div
-          className="group flex items-center gap-0.5"
-          style={{ paddingLeft: node.depth * 14 }}
-        >
-          <button
-            onClick={() => hasChildren && toggle(f.id)}
-            title={hasChildren ? (isCollapsed ? "Expand" : "Collapse") : undefined}
-            className={cn(
-              "flex h-5 w-4 shrink-0 items-center justify-center text-[var(--muted)]",
-              !hasChildren && "invisible",
-            )}
-          >
-            <ChevronRight
-              className={cn(
-                "h-3 w-3 transition-transform",
-                hasChildren && !isCollapsed && "rotate-90",
-              )}
-            />
-          </button>
-
+        <div className="group flex items-center gap-0.5">
           {renaming ? (
             <input
               value={renameValue}
@@ -122,18 +105,14 @@ export function FolderSidebar({
                 setRenameValue(f.name);
               }}
               title={`${f.name || "(folder)"} (double-click to rename)`}
-              className={cn(
-                "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
-                selected === f.id
-                  ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
-                  : "text-[var(--muted)] hover:bg-black/5",
-              )}
+              className="flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm text-[var(--muted)] transition-colors hover:bg-black/5"
             >
               <Folder className="h-3.5 w-3.5 shrink-0" />
               <span className="min-w-0 truncate">{f.name || "(folder)"}</span>
               <span className="ml-auto text-xs tabular-nums">
-                {totals.get(f.id) ?? 0}
+                {counts.get(f.id) ?? 0}
               </span>
+              <ChevronRight className="h-3 w-3 shrink-0 opacity-50" />
             </button>
           )}
 
@@ -181,12 +160,7 @@ export function FolderSidebar({
             onChange={setNewName}
             onCommit={() => commitAdd(f.id)}
             onCancel={() => setAddingAt(null)}
-            indent={node.depth * 14 + 18}
           />
-        )}
-
-        {hasChildren && !isCollapsed && (
-          <div>{node.children.map(renderNode)}</div>
         )}
       </div>
     );
@@ -194,41 +168,79 @@ export function FolderSidebar({
 
   return (
     <aside className="flex w-full flex-col gap-0.5 md:w-44">
-      <button
-        onClick={() => onSelect("all")}
-        className={cn(
-          "flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
-          selected === "all"
-            ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
-            : "text-[var(--muted)] hover:bg-black/5",
-        )}
-      >
-        All notes
-        <span className="ml-auto text-xs tabular-nums">{notes.length}</span>
-      </button>
+      {path.length > 0 ? (
+        <nav
+          aria-label="Folder path"
+          className="mb-1 flex flex-wrap items-center gap-0.5 text-xs"
+        >
+          <button
+            onClick={() => onSelect("all")}
+            title="All notes"
+            className="rounded px-1 py-0.5 text-[var(--muted)] hover:bg-black/5 hover:text-[var(--foreground)]"
+          >
+            All
+          </button>
+          {path.map((n) => (
+            <span key={n.folder.id} className="flex min-w-0 items-center gap-0.5">
+              <ChevronRight className="h-3 w-3 shrink-0 text-[var(--muted)] opacity-60" />
+              {n === open ? (
+                <span
+                  className="min-w-0 truncate font-semibold text-[var(--foreground)]"
+                  title={n.folder.name}
+                >
+                  {n.folder.name || "(folder)"}
+                </span>
+              ) : (
+                <button
+                  onClick={() => onSelect(n.folder.id)}
+                  title={n.folder.name}
+                  className="min-w-0 max-w-24 truncate rounded px-1 py-0.5 text-[var(--muted)] hover:bg-black/5 hover:text-[var(--foreground)]"
+                >
+                  {n.folder.name || "(folder)"}
+                </button>
+              )}
+            </span>
+          ))}
+        </nav>
+      ) : (
+        <button
+          onClick={() => onSelect("all")}
+          className={cn(
+            "flex items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
+            !open
+              ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
+              : "text-[var(--muted)] hover:bg-black/5",
+          )}
+        >
+          All notes
+          <span className="ml-auto text-xs tabular-nums">{notes.length}</span>
+        </button>
+      )}
 
-      {tree.roots.map(renderNode)}
+      {level.map(renderRow)}
 
-      <div className="mt-1 flex items-center gap-1 text-xs text-[var(--muted)]">
-        <span className="rounded bg-black/[0.03] px-1.5 py-0.5">
-          {unfiled} unfiled
-        </span>
-      </div>
+      {path.length === 0 && (
+        <div className="mt-1 flex items-center gap-1 text-xs text-[var(--muted)]">
+          <span className="rounded bg-black/[0.03] px-1.5 py-0.5">
+            {unfiled} unfiled
+          </span>
+        </div>
+      )}
 
-      {addingAt === "root" ? (
+      {addingAt === "here" ? (
         <NewFolderInput
           value={newName}
           onChange={setNewName}
-          onCommit={() => commitAdd(null)}
+          onCommit={() => commitAdd(open?.folder.id ?? null)}
           onCancel={() => setAddingAt(null)}
-          indent={0}
         />
       ) : (
         <button
           onClick={() => {
-            setAddingAt("root");
+            setAddingAt("here");
             setNewName("");
           }}
+          title={open ? `New folder inside "${open.folder.name}"` : "New folder"}
           className="mt-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] hover:bg-black/5"
         >
           <FolderPlus className="h-3.5 w-3.5" />
@@ -244,13 +256,11 @@ function NewFolderInput({
   onChange,
   onCommit,
   onCancel,
-  indent,
 }: {
   value: string;
   onChange: (v: string) => void;
   onCommit: () => void;
   onCancel: () => void;
-  indent: number;
 }) {
   return (
     <input
@@ -263,7 +273,6 @@ function NewFolderInput({
       }}
       placeholder="Folder name…"
       autoFocus
-      style={{ marginLeft: indent }}
       className="mt-1 h-8 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm"
     />
   );

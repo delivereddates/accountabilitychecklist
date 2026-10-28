@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { CloudOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { useStorageAvailable, useSyncStatus, useTodos } from "@/lib/local/hooks";
+import { useStorageAvailable, useTodos } from "@/lib/local/hooks";
 import type { TodoRecord } from "@/lib/local/types";
 import { TodoForm } from "./TodoForm";
 import { TodoList } from "./TodoList";
@@ -14,7 +14,6 @@ type View = "list" | "tree";
 export function TodosClient({ userId }: { userId: string }) {
   const todos = useTodos(userId);
   const storageOk = useStorageAvailable();
-  const sync = useSyncStatus();
   const [view, setView] = useState<View>("list");
 
   const sorted = useMemo(() => sortTodos(todos ?? []), [todos]);
@@ -32,7 +31,6 @@ export function TodosClient({ userId }: { userId: string }) {
           <span className="text-sm text-[var(--muted)]">{openCount} open</span>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <SyncDot pending={sync.pending} error={sync.error} />
           <div className="flex rounded-lg border border-[var(--border)] p-0.5 text-sm">
             {(["list", "tree"] as View[]).map((v) => (
               <button
@@ -82,36 +80,4 @@ function sortTodos(todos: TodoRecord[]): TodoRecord[] {
     if (da !== db) return da < db ? -1 : 1;
     return a.createdAt - b.createdAt;
   });
-}
-
-/** Tiny pending/error indicator for the background sync. */
-export function SyncDot({
-  pending,
-  error,
-}: {
-  pending: number;
-  error: string | null;
-}) {
-  if (error) {
-    return (
-      <span
-        className="h-2 w-2 rounded-full bg-[var(--color-nocheck)]"
-        title={`Sync error: ${error} (will retry)`}
-      />
-    );
-  }
-  if (pending > 0) {
-    return (
-      <span
-        className="h-2 w-2 animate-pulse rounded-full bg-[var(--muted)]"
-        title={`Syncing ${pending} change${pending === 1 ? "" : "s"}…`}
-      />
-    );
-  }
-  return (
-    <span
-      className="h-2 w-2 rounded-full bg-[var(--color-check)]"
-      title="All changes synced"
-    />
-  );
 }

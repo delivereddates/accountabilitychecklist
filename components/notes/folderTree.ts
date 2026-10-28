@@ -75,17 +75,3 @@ export function buildFolderTree(folders: FolderRecord[]): FolderTree {
 
   return { roots, order, byId };
 }
-
-/** The folder's id plus every descendant id — selecting it shows the subtree. */
-export function subtreeIds(tree: FolderTree, id: string): Set<string> {
-  const out = new Set<string>([id]);
-  const walk = (node: FolderTreeNode): void => {
-    for (const child of node.children) {
-      out.add(child.folder.id);
-      walk(child);
-    }
-  };
-  const node = tree.byId.get(id);
-  if (node) walk(node);
-  return out;
-}

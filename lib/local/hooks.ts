@@ -51,7 +51,13 @@ export function useOutboxCount(): number {
 }
 
 export function useSyncStatus() {
-  const status = useSyncExternalStore(subscribeSyncStatus, getSyncStatus);
+  // Third arg = server snapshot: the navbar renders on statically-prerendered
+  // pages (e.g. /year), where the module state is always fully idle.
+  const status = useSyncExternalStore(
+    subscribeSyncStatus,
+    getSyncStatus,
+    getSyncStatus,
+  );
   const pending = useOutboxCount();
   return { ...status, pending };
 }

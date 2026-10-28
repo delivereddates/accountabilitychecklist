@@ -4,28 +4,22 @@ import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { CloudOff } from "lucide-react";
 import { cn } from "@/lib/utils";
-import {
-  useFolders,
-  useNotes,
-  useStorageAvailable,
-  useSyncStatus,
-} from "@/lib/local/hooks";
-import { SyncDot } from "@/components/todos/TodosClient";
+import { useFolders, useNotes, useStorageAvailable } from "@/lib/local/hooks";
 import { FolderSidebar } from "./FolderSidebar";
-import { buildFolderTree, subtreeIds } from "./folderTree";
+import { buildFolderTree } from "./folderTree";
 import { NoteList } from "./NoteList";
 import { NoteEditor } from "./NoteEditor";
 
 /**
- * Three-pane notes layout (folder tree / list / editor) on md+,
- * master-detail swap on phones. `?id=` deep-links a note (used by the
+ * Three-pane notes layout (folders / list / editor) on md+, master-detail
+ * swap on phones. Selecting a folder opens it — the list shows the notes at
+ * that level (not the subtree). `?id=` deep-links a note (used by the
  * calendar agenda).
  */
 export function NotesClient({ userId }: { userId: string }) {
   const notes = useNotes(userId);
   const folders = useFolders(userId);
   const storageOk = useStorageAvailable();
-  const sync = useSyncStatus();
   const searchParams = useSearchParams();
 
   const [folder, setFolder] = useState<string | "all">("all");
@@ -33,13 +27,14 @@ export function NotesClient({ userId }: { userId: string }) {
   const [selectedId, setSelectedId] = useState<string | null>(paramId);
 
   const tree = useMemo(() => buildFolderTree(folders ?? []), [folders]);
+  // A deleted (or mid-sync) selection browses All notes until re-picked.
+  const open =
+    folder !== "all" && tree.byId.has(folder) ? folder : ("all" as const);
   const visibleNotes = useMemo(() => {
     const all = notes ?? [];
-    if (folder === "all") return all;
-    // Selecting a folder shows its whole subtree.
-    const ids = subtreeIds(tree, folder);
-    return all.filter((n) => n.folderId != null && ids.has(n.folderId));
-  }, [notes, folder, tree]);
+    if (open === "all") return all;
+    return all.filter((n) => n.folderId === open);
+  }, [notes, open]);
 
   const selected =
     (notes ?? []).find((n) => n.id === selectedId) ?? null;
@@ -49,11 +44,8 @@ export function NotesClient({ userId }: { userId: string }) {
       <header className="mb-4 flex items-center gap-3">
         <h1 className="text-lg font-semibold tracking-tight">Notes</h1>
         <span className="text-sm text-[var(--muted)]">
-          {(notes ?? []).length} note{(notes ?? []).length === 1 ? "" : "s"}
+          {visibleNotes.length} note{visibleNotes.length === 1 ? "" : "s"}
         </span>
-        <div className="ml-auto">
-          <SyncDot pending={sync.pending} error={sync.error} />
-        </div>
       </header>
 
       {!storageOk && (
@@ -73,7 +65,7 @@ export function NotesClient({ userId }: { userId: string }) {
               userId={userId}
               tree={tree}
               notes={notes}
-              selected={folder}
+              selected={open}
               onSelect={setFolder}
             />
           </div>
@@ -81,7 +73,7 @@ export function NotesClient({ userId }: { userId: string }) {
           <NoteList
             userId={userId}
             notes={visibleNotes}
-            folderId={folder}
+            folderId={open}
             selectedId={selectedId}
             onSelect={setSelectedId}
             className={cn(selected && "hidden md:flex")}
