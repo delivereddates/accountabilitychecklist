@@ -12,9 +12,11 @@ const MAX_DEPTH = 32; // paranoia guard; wouldCreateCycle keeps the data clean
 export function TodoTree({
   todos,
   byId,
+  onEdit,
 }: {
   todos: TodoRecord[];
   byId: Map<string, TodoRecord>;
+  onEdit: (id: string) => void;
 }) {
   const today = toISODate(new Date());
   const forest = useMemo(() => buildForest(todos), [todos]);
@@ -40,7 +42,7 @@ export function TodoTree({
       >
         {children.map((t) => (
           <li key={t.id}>
-            <TodoItem todo={t} todos={todos} byId={byId} today={today} />
+            <TodoItem todo={t} byId={byId} today={today} onEdit={onEdit} />
             {renderBranch(t.id, depth + 1)}
           </li>
         ))}

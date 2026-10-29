@@ -25,12 +25,14 @@ export function TodoList({
   variant,
   today,
   weekOut,
+  onEdit,
 }: {
   todos: TodoRecord[];
   byId: Map<string, TodoRecord>;
   variant: ListView;
   today: string;
   weekOut: string;
+  onEdit: (id: string) => void;
 }) {
   const tomorrow = toISODate(new Date(Date.now() + 24 * 60 * 60 * 1000));
 
@@ -88,9 +90,9 @@ export function TodoList({
                   <TodoItem
                     key={t.id}
                     todo={t}
-                    todos={todos}
                     byId={byId}
                     today={today}
+                    onEdit={onEdit}
                   />
                 ))}
               </ul>
@@ -102,9 +104,9 @@ export function TodoList({
                 <TodoItem
                   key={t.id}
                   todo={t}
-                  todos={todos}
                   byId={byId}
                   today={today}
+                  onEdit={onEdit}
                 />
               ))}
             </ul>
@@ -119,9 +121,9 @@ export function TodoList({
               <TodoItem
                 key={t.id}
                 todo={t}
-                todos={todos}
                 byId={byId}
                 today={today}
+                onEdit={onEdit}
               />
             ))}
           </ul>

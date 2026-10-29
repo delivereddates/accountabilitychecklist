@@ -146,6 +146,9 @@ export function BlockerPicker({
             return;
           }
           if (e.key === "Escape") {
+            // Keep Escape local: close just the suggestion list (a second
+            // Escape can then close the surrounding sheet, if any).
+            e.stopPropagation();
             setQuery(display);
             setOpen(false);
           }

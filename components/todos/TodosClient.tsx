@@ -8,6 +8,7 @@ import type { TodoRecord } from "@/lib/local/types";
 import { TodoForm } from "./TodoForm";
 import { TodoList } from "./TodoList";
 import { TodoTree } from "./TodoTree";
+import { TodoEditDialog } from "./TodoEditDialog";
 
 type View = "current" | "dated" | "blocked" | "tree";
 
@@ -32,6 +33,10 @@ export function TodosClient() {
   const todos = useTodos(userId);
   const storageOk = useStorageAvailable();
   const [view, setView] = useState<View>(readView);
+  // The todo whose edit sheet is open (null = closed). Held here, above the
+  // lists, so the sheet stays open even when an edit moves the todo out of
+  // the view it was opened from.
+  const [editingId, setEditingId] = useState<string | null>(null);
 
   const sorted = useMemo(() => sortTodos(todos ?? []), [todos]);
   const byId = useMemo(
@@ -95,7 +100,7 @@ export function TodosClient() {
       {todos === undefined ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
       ) : view === "tree" ? (
-        <TodoTree todos={sorted} byId={byId} />
+        <TodoTree todos={sorted} byId={byId} onEdit={setEditingId} />
       ) : (
         <TodoList
           todos={sorted}
@@ -103,8 +108,20 @@ export function TodosClient() {
           variant={view}
           today={today}
           weekOut={weekOut}
+          onEdit={setEditingId}
         />
       )}
+
+      {editingId && (() => {
+        const editing = sorted.find((t) => t.id === editingId);
+        return editing ? (
+          <TodoEditDialog
+            todo={editing}
+            todos={sorted}
+            onClose={() => setEditingId(null)}
+          />
+        ) : null; // deleted mid-edit (another device) — just close
+      })()}
     </div>
   );
 }
