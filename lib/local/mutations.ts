@@ -54,6 +54,7 @@ export async function createTodo(
     date?: string | null;
     blockerId?: string | null;
     blockerText?: string | null;
+    priority?: "high" | "low" | null;
   },
 ): Promise<string> {
   const db = getDb();
@@ -70,6 +71,7 @@ export async function createTodo(
     date: input.date ?? null,
     blockerId: input.blockerId ?? null,
     blockerText: input.blockerText ?? null,
+    priority: input.priority ?? null,
     sortOrder: 0,
     createdAt: now,
     updatedAt: now,
@@ -84,7 +86,10 @@ export async function createTodo(
 }
 
 export type TodoPatch = Partial<
-  Pick<TodoRecord, "text" | "date" | "blockerId" | "blockerText" | "sortOrder">
+  Pick<
+    TodoRecord,
+    "text" | "date" | "blockerId" | "blockerText" | "priority" | "sortOrder"
+  >
 >;
 
 export async function updateTodo(id: string, patch: TodoPatch): Promise<void> {

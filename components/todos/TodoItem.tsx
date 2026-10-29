@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Lock, Trash2, X } from "lucide-react";
+import { ArrowDown, ArrowUp, Check, Lock, Trash2, X } from "lucide-react";
 import { cn, formatDDMMYY } from "@/lib/utils";
 import { blockerLabel, isBlocked } from "@/lib/local/graph";
 import {
@@ -13,11 +13,20 @@ import {
 import type { TodoRecord } from "@/lib/local/types";
 import { BlockerPicker, type BlockerSelection } from "./BlockerPicker";
 
+/** Priority cycle for the tag button: none → high → low → none. */
+function nextPriority(p: string | null): "high" | "low" | null {
+  if (p === "high") return "low";
+  if (p === "low") return null;
+  return "high";
+}
+
 /**
  * One todo row, shared by the flat views and the dependency tree: checkbox,
- * inline multiline text edit, blocked badge, date chip (with an explicit
- * clear — Safari's date picker has none), blocker box, delete. Every control
- * writes locally — instant, no network on the UI path.
+ * inline multiline text edit, priority tag, blocker toggle, date chip (with
+ * an explicit clear — Safari's date picker has none), delete. The waiting-on
+ * box is hidden until asked for (＋wait, or the lock when blocked) so rows
+ * stay one line. Every control writes locally — instant, no network on the
+ * UI path.
  */
 export function TodoItem({
   todo,
@@ -31,6 +40,7 @@ export function TodoItem({
   today: string;
 }) {
   const [editing, setEditing] = useState(false);
+  const [blockerOpen, setBlockerOpen] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const editRef = useRef<HTMLTextAreaElement>(null);
   const blocked = isBlocked(todo, byId);
@@ -109,14 +119,57 @@ export function TodoItem({
           </button>
         )}
 
-        {blocked && (
-          <span
-            className="mt-1 flex shrink-0 items-center gap-1 text-[var(--muted)]"
-            title={`Waiting on: ${blockerLabel(todo, byId) ?? ""}`}
+        {todo.priority ? (
+          <button
+            onClick={() =>
+              void updateTodo(todo.id, { priority: nextPriority(todo.priority) })
+            }
+            title={`Priority: ${todo.priority} — click to cycle High → Low → off`}
+            className={cn(
+              "mt-0.5 flex shrink-0 items-center gap-0.5 rounded px-1.5 py-0.5 text-xs font-medium",
+              todo.priority === "high"
+                ? "bg-[var(--color-nocheck-soft)] text-[var(--color-nocheck)]"
+                : "bg-black/5 text-[var(--muted)]",
+            )}
           >
-            <Lock className="h-3.5 w-3.5" />
-          </span>
+            {todo.priority === "high" ? (
+              <ArrowUp className="h-3 w-3" />
+            ) : (
+              <ArrowDown className="h-3 w-3" />
+            )}
+            {todo.priority === "high" ? "High" : "Low"}
+          </button>
+        ) : (
+          <button
+            onClick={() => void updateTodo(todo.id, { priority: "high" })}
+            className="mt-0.5 shrink-0 rounded px-1 py-0.5 text-xs text-[var(--muted)] hover:bg-black/5"
+            title="Tag as high or low priority"
+          >
+            ＋prio
+          </button>
         )}
+
+        <button
+          onClick={() => setBlockerOpen((o) => !o)}
+          aria-expanded={blockerOpen}
+          aria-label={blocked ? "Edit blocker" : "Add blocker"}
+          title={
+            blockerOpen
+              ? "Hide waiting-on"
+              : blocked
+                ? `Waiting on: ${blockerLabel(todo, byId) ?? ""} — click to edit`
+                : "Set what this is waiting on (optional)"
+          }
+          className="mt-0.5 flex shrink-0 items-center rounded px-1 py-0.5 text-xs text-[var(--muted)] hover:bg-black/5"
+        >
+          {blockerOpen ? (
+            <X className="h-3 w-3" />
+          ) : blocked ? (
+            <Lock className="h-3.5 w-3.5" />
+          ) : (
+            "＋wait"
+          )}
+        </button>
 
         {todo.date ? (
           <>
@@ -176,20 +229,23 @@ export function TodoItem({
         </button>
       </div>
 
-      <div className="flex items-center gap-2 pl-7">
-        <BlockerPicker
-          todos={todos}
-          selfId={todo.id}
-          value={{ blockerId: todo.blockerId, blockerText: todo.blockerText ?? null }}
-          onChange={changeBlocker}
-          className="h-7 w-56 max-w-full rounded border border-[var(--border)] bg-[var(--card)] px-1.5 text-xs text-[var(--muted)] outline-none focus:border-[var(--color-check)]"
-        />
-        {error && (
-          <span className="text-xs text-[var(--color-nocheck)]" role="alert">
-            {error}
-          </span>
-        )}
-      </div>
+      {blockerOpen && (
+        <div className="flex items-center gap-2 pl-7">
+          <BlockerPicker
+            todos={todos}
+            selfId={todo.id}
+            autoFocus
+            value={{ blockerId: todo.blockerId, blockerText: todo.blockerText ?? null }}
+            onChange={changeBlocker}
+            className="h-7 w-56 max-w-full rounded border border-[var(--border)] bg-[var(--card)] px-1.5 text-xs text-[var(--muted)] outline-none focus:border-[var(--color-check)]"
+          />
+          {error && (
+            <span className="text-xs text-[var(--color-nocheck)]" role="alert">
+              {error}
+            </span>
+          )}
+        </div>
+      )}
     </li>
   );
 }

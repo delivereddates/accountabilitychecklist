@@ -30,12 +30,15 @@ export function BlockerPicker({
   value,
   onChange,
   className,
+  autoFocus,
 }: {
   todos: TodoRecord[];
   selfId?: string;
   value: BlockerSelection;
   onChange: (next: BlockerSelection) => void;
   className?: string;
+  /** Focus on mount — for rows that reveal the box on demand. */
+  autoFocus?: boolean;
 }) {
   const byId = useMemo(
     () => new Map(todos.map((t) => [t.id, t] as const)),
@@ -106,6 +109,7 @@ export function BlockerPicker({
       <input
         ref={inputRef}
         value={query}
+        autoFocus={autoFocus}
         onFocus={() => {
           setOpen(true);
           setHighlight(suggestions.findIndex((s) => !s.cycles));

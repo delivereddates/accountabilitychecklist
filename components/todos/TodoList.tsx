@@ -10,10 +10,12 @@ export type ListView = "current" | "dated" | "blocked";
 /**
  * Flat list for the three tab views.
  *  - Current: the working set — unblocked todos that are undated, past due,
- *    or due within a week, bucketed Overdue / Today / Tomorrow / Next 7
- *    days / No date.
- *  - Dated: everything with a date, in date order (overlaps Current by
- *    design — it's the full schedule, near *and* far).
+ *    or due within a week, bucketed High priority (pinned above everything)
+ *    / Overdue / Today / Tomorrow / Next 7 days / No date / Low priority
+ *    (parked at the bottom). Tagged todos leave their date bucket for a
+ *    priority bucket.
+ *  - Dated: the forward schedule — everything dated today or later, in date
+ *    order. Past-due todos are Current-only (the Overdue bucket).
  *  - Blocked: everything locked by a live blocker.
  * Each ends with a "Done" section under the same filter.
  */
@@ -36,28 +38,33 @@ export function TodoList({
     variant === "current"
       ? !isBlocked(t, byId) && (!t.date || t.date <= weekOut)
       : variant === "dated"
-        ? !!t.date
+        ? // Open past-due todos live in Current's Overdue bucket only; done
+          // ones stay (a completed todo is never "overdue").
+          !!t.date && (t.completed || t.date >= today)
         : isBlocked(t, byId);
 
   const open = todos.filter((t) => !t.completed && inView(t));
   const done = todos.filter((t) => t.completed && inView(t));
+  const plain = open.filter((t) => !t.priority); // untagged keep the date buckets
 
   const buckets =
     variant === "current"
       ? [
+          { label: "High priority", items: open.filter((t) => t.priority === "high") },
           {
             label: "Overdue",
-            items: open.filter((t) => t.date && t.date < today),
+            items: plain.filter((t) => t.date && t.date < today),
           },
-          { label: "Today", items: open.filter((t) => t.date === today) },
-          { label: "Tomorrow", items: open.filter((t) => t.date === tomorrow) },
+          { label: "Today", items: plain.filter((t) => t.date === today) },
+          { label: "Tomorrow", items: plain.filter((t) => t.date === tomorrow) },
           {
             label: "Next 7 days",
-            items: open.filter(
+            items: plain.filter(
               (t) => t.date && t.date > tomorrow && t.date <= weekOut,
             ),
           },
-          { label: "No date", items: open.filter((t) => !t.date) },
+          { label: "No date", items: plain.filter((t) => !t.date) },
+          { label: "Low priority", items: open.filter((t) => t.priority === "low") },
         ].filter((b) => b.items.length > 0)
       : [];
 
@@ -65,7 +72,7 @@ export function TodoList({
     variant === "current"
       ? "Nothing current — everything is blocked, dated beyond a week, or done."
       : variant === "dated"
-        ? "Nothing dated."
+        ? "Nothing dated today or later — past-due lives in Current."
         : "Nothing blocked.";
 
   return (
