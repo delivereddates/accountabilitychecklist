@@ -1,7 +1,9 @@
 import "server-only";
+import { randomUUID } from "node:crypto";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import { getAppUsers } from "./app-users";
 import type {
+  ApiKey,
   CompletionStatus,
   PushSubscriptionRow,
   Task,
@@ -10,7 +12,12 @@ import type {
   User,
   UserSettings,
 } from "./types";
-import type { SyncChanges, SyncPullResponse } from "./local/types";
+import type {
+  EventRecord,
+  SyncChanges,
+  SyncPullResponse,
+  TodoRecord,
+} from "./local/types";
 
 let _client: SupabaseClient | null = null;
 
@@ -539,35 +546,8 @@ export async function pullLocalRecords(
 
   return {
     cursor: Date.now() - 2000,
-    todos: (todos.data ?? []).map((row: TodoRow) => ({
-      id: row.id,
-      userId: row.user_id,
-      text: row.text,
-      completed: row.completed,
-      completedAt: row.completed_at,
-      date: row.date,
-      blockerId: row.blocker_id,
-      sortOrder: row.sort_order,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      deleted: row.deleted,
-    })),
-    events: (events.data ?? []).map((row: EventRow) => ({
-      id: row.id,
-      userId: row.user_id,
-      title: row.title,
-      description: row.description,
-      date: row.date,
-      allDay: row.all_day,
-      startMin: row.start_min,
-      endMin: row.end_min,
-      location: row.location,
-      source: row.source,
-      externalId: row.external_id,
-      createdAt: row.created_at,
-      updatedAt: row.updated_at,
-      deleted: row.deleted,
-    })),
+    todos: (todos.data ?? []).map(mapTodoRow),
+    events: (events.data ?? []).map(mapEventRow),
     notes: (notes.data ?? []).map((row: NoteRow) => ({
       id: row.id,
       userId: row.user_id,
@@ -590,6 +570,224 @@ export async function pullLocalRecords(
       deleted: row.deleted,
     })),
   };
+}
+
+// ---------------------------------------------------------------------------
+// External write-only API (auth in lib/api-auth.ts, routes in app/api/v1/*)
+// ---------------------------------------------------------------------------
+
+/** Row → record mappers shared by pull and the /api/v1 inserts, so the API
+ *  responses are byte-identical to the sync wire format. */
+function mapTodoRow(row: TodoRow): TodoRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    text: row.text,
+    completed: row.completed,
+    completedAt: row.completed_at,
+    date: row.date,
+    blockerId: row.blocker_id,
+    sortOrder: row.sort_order,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deleted: row.deleted,
+  };
+}
+
+function mapEventRow(row: EventRow): EventRecord {
+  return {
+    id: row.id,
+    userId: row.user_id,
+    title: row.title,
+    description: row.description,
+    date: row.date,
+    allDay: row.all_day,
+    startMin: row.start_min,
+    endMin: row.end_min,
+    location: row.location,
+    source: row.source,
+    externalId: row.external_id,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+    deleted: row.deleted,
+  };
+}
+
+/** Resolve an API key hash to its owner. Active (non-revoked) keys only. */
+export async function getUserIdForApiKey(
+  keyHash: string,
+): Promise<{ userId: string; keyId: string } | null> {
+  const { data, error } = await admin()
+    .from("api_keys")
+    .select("id, user_id")
+    .eq("key_hash", keyHash)
+    .is("revoked_at", null)
+    .maybeSingle();
+  if (error) throw error;
+  return data ? { userId: data.user_id, keyId: data.id } : null;
+}
+
+/** Stamp last_used_at (best-effort; callers swallow failures). */
+export async function touchApiKey(keyId: string): Promise<void> {
+  const { error } = await admin()
+    .from("api_keys")
+    .update({ last_used_at: new Date().toISOString() })
+    .eq("id", keyId);
+  if (error) throw error;
+}
+
+export async function createApiKey(
+  userId: string,
+  input: { name: string; keyHash: string; keyPrefix: string },
+): Promise<ApiKey> {
+  const { data, error } = await admin()
+    .from("api_keys")
+    .insert({
+      user_id: userId,
+      name: input.name,
+      key_hash: input.keyHash,
+      key_prefix: input.keyPrefix,
+    })
+    .select("id, name, key_prefix, created_at, last_used_at, revoked_at")
+    .single();
+  if (error) throw error;
+  return mapApiKeyRow(data as ApiKeyRow);
+}
+
+export async function listApiKeys(userId: string): Promise<ApiKey[]> {
+  const { data, error } = await admin()
+    .from("api_keys")
+    .select("id, name, key_prefix, created_at, last_used_at, revoked_at")
+    .eq("user_id", userId)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+  return (data ?? []).map((row: ApiKeyRow) => mapApiKeyRow(row));
+}
+
+/** Revoke (sets revoked_at; idempotent). False = no such key for this user. */
+export async function revokeApiKey(
+  userId: string,
+  id: string,
+): Promise<boolean> {
+  const { data, error } = await admin()
+    .from("api_keys")
+    .update({ revoked_at: new Date().toISOString() })
+    .eq("id", id)
+    .eq("user_id", userId)
+    .select("id")
+    .maybeSingle();
+  if (error) throw error;
+  return data !== null;
+}
+
+interface ApiKeyRow {
+  id: string;
+  name: string;
+  key_prefix: string;
+  created_at: string;
+  last_used_at: string | null;
+  revoked_at: string | null;
+}
+
+function mapApiKeyRow(row: ApiKeyRow): ApiKey {
+  return {
+    id: row.id,
+    name: row.name,
+    keyPrefix: row.key_prefix,
+    createdAt: row.created_at,
+    lastUsedAt: row.last_used_at,
+    revokedAt: row.revoked_at,
+  };
+}
+
+/**
+ * Insert a todo created through the external API. Server-generated id and
+ * ms-epoch timestamps; synced_at defaults to now(), so every device merges
+ * the row on its next pull. Same defaults as a client-side createTodo.
+ */
+export async function insertApiTodo(
+  userId: string,
+  input: { text: string; date: string | null },
+): Promise<TodoRecord> {
+  const now = Date.now();
+  const { data, error } = await admin()
+    .from("todos")
+    .insert({
+      id: randomUUID(),
+      user_id: userId,
+      text: input.text,
+      completed: false,
+      completed_at: null,
+      date: input.date,
+      blocker_id: null,
+      sort_order: 0,
+      created_at: now,
+      updated_at: now,
+      deleted: false,
+    })
+    .select("*")
+    .single();
+  if (error) throw error;
+  return mapTodoRow(data as TodoRow);
+}
+
+/**
+ * Insert an event created through the external API (source "api"). When the
+ * caller passes an externalId and a row already exists for (user, "api",
+ * externalId) — the partial unique index — the insert hits 23505 and the
+ * existing row is returned instead, making retries idempotent.
+ */
+export async function insertApiEvent(
+  userId: string,
+  input: {
+    title: string;
+    description: string;
+    date: string;
+    allDay: boolean;
+    startMin: number | null;
+    endMin: number | null;
+    location: string | null;
+    externalId: string | null;
+  },
+): Promise<{ record: EventRecord; existed: boolean }> {
+  const now = Date.now();
+  const { data, error } = await admin()
+    .from("events")
+    .insert({
+      id: randomUUID(),
+      user_id: userId,
+      title: input.title,
+      description: input.description,
+      date: input.date,
+      all_day: input.allDay,
+      start_min: input.startMin,
+      end_min: input.endMin,
+      location: input.location,
+      source: "api",
+      external_id: input.externalId,
+      created_at: now,
+      updated_at: now,
+      deleted: false,
+    })
+    .select("*")
+    .single();
+  if (error) {
+    if (error.code === "23505" && input.externalId !== null) {
+      const { data: existing, error: selError } = await admin()
+        .from("events")
+        .select("*")
+        .eq("user_id", userId)
+        .eq("source", "api")
+        .eq("external_id", input.externalId)
+        .maybeSingle();
+      if (selError) throw selError;
+      if (existing) {
+        return { record: mapEventRow(existing as EventRow), existed: true };
+      }
+    }
+    throw error;
+  }
+  return { record: mapEventRow(data as EventRow), existed: false };
 }
 
 // Snake_case row shapes as supabase-js returns them (date columns arrive as

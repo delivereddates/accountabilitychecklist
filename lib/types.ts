@@ -47,3 +47,13 @@ export interface PushSubscriptionRow {
   p256dh: string;
   auth: string;
 }
+
+/** One external-API key (api_keys row). The secret itself is never stored. */
+export interface ApiKey {
+  id: string;
+  name: string;
+  keyPrefix: string;
+  createdAt: string;
+  lastUsedAt: string | null;
+  revokedAt: string | null;
+}

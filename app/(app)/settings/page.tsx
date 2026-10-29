@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import type { UserSettings } from "@/lib/types";
+import { ApiKeys } from "@/components/settings/ApiKeys";
 import { NotificationSettings } from "@/components/settings/NotificationSettings";
 import { PushSettings } from "@/components/settings/PushSettings";
 
@@ -83,6 +84,8 @@ export default function SettingsPage() {
         subscriptionCount={data.subscriptionCount}
         onChanged={load}
       />
+
+      <ApiKeys />
 
       <p className="text-xs text-[var(--muted)]">
         Accounts are managed by the administrator — usernames and passwords are

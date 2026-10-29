@@ -4,7 +4,8 @@ import { sessionOptions, type SessionData } from "@/lib/session";
 
 /**
  * Gate every route except /login, the self-authenticating API routes
- * (/api/login, /api/logout, /api/cron/*), and static assets.
+ * (/api/login, /api/logout, /api/cron/*, /api/v1/* — the latter check their
+ * own Bearer API key in lib/api-auth.ts), and static assets.
  * Requires a logged-in session WITH a userId (per-user auth) — cookies from
  * the old shared-password era lack it, so everyone re-logs in once.
  * API paths get a 401 JSON; pages redirect to /login (remembering the
@@ -33,13 +34,13 @@ export async function middleware(req: NextRequest) {
 
 export const config = {
   matcher: [
-    // Match everything except: /login, the auth/cron API routes, Next
-    // internals, favicon, and the PWA/icon routes. Icons + manifest MUST be
-    // reachable without auth — iOS/Android fetch them without session cookies
-    // when adding to the home screen, and a redirect to /login serves HTML
-    // where a PNG is expected (the broken-home-screen-icon bug). Every other
-    // /api route IS matched (guarded above) so the API isn't publicly
-    // readable/writable.
-    "/((?!api/login|api/logout|api/cron|login|_next/static|_next/image|favicon.ico|icon|apple-icon|apple-touch-icon|manifest|.*\\..*).*)",
+    // Match everything except: /login, the auth/cron API routes, the
+    // Bearer-key /api/v1 routes, Next internals, favicon, and the PWA/icon
+    // routes. Icons + manifest MUST be reachable without auth — iOS/Android
+    // fetch them without session cookies when adding to the home screen, and
+    // a redirect to /login serves HTML where a PNG is expected (the
+    // broken-home-screen-icon bug). Every other /api route IS matched
+    // (guarded above) so the API isn't publicly readable/writable.
+    "/((?!api/login|api/logout|api/v1|api/cron|login|_next/static|_next/image|favicon.ico|icon|apple-icon|apple-touch-icon|manifest|.*\\..*).*)",
   ],
 };
