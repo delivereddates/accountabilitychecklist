@@ -2,20 +2,36 @@
 
 import { useMemo, useState } from "react";
 import { CloudOff } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, toISODate } from "@/lib/utils";
 import { useLocalUserId, useStorageAvailable, useTodos } from "@/lib/local/hooks";
 import type { TodoRecord } from "@/lib/local/types";
 import { TodoForm } from "./TodoForm";
 import { TodoList } from "./TodoList";
 import { TodoTree } from "./TodoTree";
 
-type View = "list" | "tree";
+type View = "current" | "dated" | "blocked" | "tree";
+
+const VIEWS: { key: View; label: string }[] = [
+  { key: "current", label: "Current" },
+  { key: "dated", label: "Dated" },
+  { key: "blocked", label: "Blocked" },
+  { key: "tree", label: "Tree" },
+];
+
+// The chosen view sticks across tab switches (per device, like the draft).
+const VIEW_KEY = "todo-view-v1";
+
+function readView(): View {
+  if (typeof window === "undefined") return "current";
+  const v = window.localStorage.getItem(VIEW_KEY);
+  return VIEWS.some((x) => x.key === v) ? (v as View) : "current";
+}
 
 export function TodosClient() {
   const userId = useLocalUserId();
   const todos = useTodos(userId);
   const storageOk = useStorageAvailable();
-  const [view, setView] = useState<View>("list");
+  const [view, setView] = useState<View>(readView);
 
   const sorted = useMemo(() => sortTodos(todos ?? []), [todos]);
   const byId = useMemo(
@@ -23,6 +39,17 @@ export function TodosClient() {
     [sorted],
   );
   const openCount = sorted.filter((t) => !t.completed).length;
+  const today = toISODate(new Date());
+  const weekOut = toISODate(new Date(Date.now() + 7 * 24 * 60 * 60 * 1000));
+
+  function chooseView(v: View) {
+    setView(v);
+    try {
+      window.localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // Private mode etc. — the choice lasts for this visit.
+    }
+  }
 
   if (!userId) {
     return <p className="text-sm text-[var(--muted)]">Loading…</p>;
@@ -30,25 +57,25 @@ export function TodosClient() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <header className="mb-4 flex items-center gap-3">
+      <header className="mb-4 flex flex-wrap items-center gap-3">
         <h1 className="text-lg font-semibold tracking-tight">Todos</h1>
         {todos !== undefined && (
           <span className="text-sm text-[var(--muted)]">{openCount} open</span>
         )}
         <div className="ml-auto flex items-center gap-2">
-          <div className="flex rounded-lg border border-[var(--border)] p-0.5 text-sm">
-            {(["list", "tree"] as View[]).map((v) => (
+          <div className="flex rounded-lg border border-[var(--border)] p-0.5 text-xs">
+            {VIEWS.map((v) => (
               <button
-                key={v}
-                onClick={() => setView(v)}
+                key={v.key}
+                onClick={() => chooseView(v.key)}
                 className={cn(
-                  "rounded-md px-2.5 py-1 capitalize transition-colors",
-                  view === v
+                  "rounded-md px-2 py-1 transition-colors",
+                  view === v.key
                     ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
                     : "text-[var(--muted)]",
                 )}
               >
-                {v}
+                {v.label}
               </button>
             ))}
           </div>
@@ -59,7 +86,7 @@ export function TodosClient() {
         <p className="mb-4 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--muted)]">
           <CloudOff className="h-4 w-4 shrink-0" />
           Offline storage is unavailable in this browser (private mode?) —
-          changes can&apos;t be saved.
+          changes can&rsquo;t be saved.
         </p>
       )}
 
@@ -67,10 +94,16 @@ export function TodosClient() {
 
       {todos === undefined ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
-      ) : view === "list" ? (
-        <TodoList todos={sorted} byId={byId} />
-      ) : (
+      ) : view === "tree" ? (
         <TodoTree todos={sorted} byId={byId} />
+      ) : (
+        <TodoList
+          todos={sorted}
+          byId={byId}
+          variant={view}
+          today={today}
+          weekOut={weekOut}
+        />
       )}
     </div>
   );

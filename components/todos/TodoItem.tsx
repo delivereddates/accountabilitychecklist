@@ -1,9 +1,9 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Check, Lock, Trash2 } from "lucide-react";
+import { Check, Lock, Trash2, X } from "lucide-react";
 import { cn, formatDDMMYY } from "@/lib/utils";
-import { isBlocked } from "@/lib/local/graph";
+import { blockerLabel, isBlocked } from "@/lib/local/graph";
 import {
   CycleError,
   deleteTodo,
@@ -11,12 +11,13 @@ import {
   updateTodo,
 } from "@/lib/local/mutations";
 import type { TodoRecord } from "@/lib/local/types";
-import { BlockerPicker } from "./BlockerPicker";
+import { BlockerPicker, type BlockerSelection } from "./BlockerPicker";
 
 /**
- * One todo row, shared by the flat list and the dependency tree: checkbox,
- * inline text edit, blocked badge, date chip, blocker picker, delete. Every
- * control writes locally — instant, no network on the UI path.
+ * One todo row, shared by the flat views and the dependency tree: checkbox,
+ * inline multiline text edit, blocked badge, date chip (with an explicit
+ * clear — Safari's date picker has none), blocker box, delete. Every control
+ * writes locally — instant, no network on the UI path.
  */
 export function TodoItem({
   todo,
@@ -31,35 +32,41 @@ export function TodoItem({
 }) {
   const [editing, setEditing] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const editRef = useRef<HTMLTextAreaElement>(null);
   const blocked = isBlocked(todo, byId);
   const overdue = !!todo.date && todo.date < today && !todo.completed;
 
   useEffect(() => {
-    if (editing) inputRef.current?.select();
+    if (!editing) return;
+    const el = editRef.current;
+    if (!el) return;
+    el.focus();
+    el.select();
+    el.style.height = "0px";
+    el.style.height = `${el.scrollHeight}px`;
   }, [editing]);
 
   function commitText(next: string) {
     setEditing(false);
-    const trimmed = next.trim();
+    const trimmed = next.trim(); // outer only — inner newlines are content
     if (trimmed && trimmed !== todo.text) void updateTodo(todo.id, { text: trimmed });
   }
 
-  function changeBlocker(blockerId: string | null) {
+  function changeBlocker(next: BlockerSelection) {
     setError(null);
-    updateTodo(todo.id, { blockerId }).catch((e) => {
+    updateTodo(todo.id, next).catch((e) => {
       if (e instanceof CycleError) setError(e.message);
     });
   }
 
   return (
     <li className="flex flex-col gap-1 py-1.5">
-      <div className="flex items-center gap-2">
+      <div className="flex items-start gap-2">
         <button
           onClick={() => void toggleTodo(todo.id)}
           aria-label={todo.completed ? "Mark not done" : "Mark done"}
           className={cn(
-            "flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors",
+            "mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded border transition-colors",
             todo.completed
               ? "border-[var(--color-check)] bg-[var(--color-check)] text-white"
               : "border-[var(--border)] hover:border-[var(--color-check)]",
@@ -69,22 +76,31 @@ export function TodoItem({
         </button>
 
         {editing ? (
-          <input
-            ref={inputRef}
+          <textarea
+            ref={editRef}
             defaultValue={todo.text}
+            rows={1}
+            onChange={(e) => {
+              const el = e.currentTarget;
+              el.style.height = "0px";
+              el.style.height = `${el.scrollHeight}px`;
+            }}
             onBlur={(e) => commitText(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === "Enter") commitText(e.currentTarget.value);
+              if (e.key === "Enter" && !e.shiftKey) {
+                e.preventDefault();
+                commitText(e.currentTarget.value);
+              }
               if (e.key === "Escape") setEditing(false);
             }}
-            className="min-w-0 flex-1 rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-sm outline-none"
+            className="min-h-7 min-w-0 flex-1 resize-none rounded border border-[var(--border)] bg-[var(--card)] px-2 py-1 text-sm outline-none focus:border-[var(--color-check)]"
             autoFocus
           />
         ) : (
           <button
             onClick={() => setEditing(true)}
             className={cn(
-              "min-w-0 flex-1 truncate text-left text-sm",
+              "min-w-0 flex-1 whitespace-pre-wrap break-words text-left text-sm",
               todo.completed && "text-[var(--muted)] line-through",
             )}
             title="Edit"
@@ -95,37 +111,46 @@ export function TodoItem({
 
         {blocked && (
           <span
-            className="flex shrink-0 items-center gap-1 text-[var(--muted)]"
-            title={`Waiting on: ${byId.get(todo.blockerId!)?.text ?? ""}`}
+            className="mt-1 flex shrink-0 items-center gap-1 text-[var(--muted)]"
+            title={`Waiting on: ${blockerLabel(todo, byId) ?? ""}`}
           >
             <Lock className="h-3.5 w-3.5" />
           </span>
         )}
 
-        {todo.date && (
+        {todo.date ? (
+          <>
+            <label
+              className={cn(
+                "mt-0.5 shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-xs tabular-nums",
+                overdue
+                  ? "bg-[var(--color-nocheck-soft)] text-[var(--color-nocheck)]"
+                  : "text-[var(--muted)] hover:bg-black/5",
+              )}
+              title={todo.completed ? "Date" : "Change date"}
+            >
+              {formatDDMMYY(todo.date)}
+              <input
+                type="date"
+                value={todo.date}
+                onChange={(e) =>
+                  void updateTodo(todo.id, { date: e.target.value || null })
+                }
+                className="sr-only"
+              />
+            </label>
+            <button
+              onClick={() => void updateTodo(todo.id, { date: null })}
+              aria-label="Clear date"
+              title="Clear date"
+              className="mt-0.5 shrink-0 text-[var(--muted)] hover:text-[var(--color-nocheck)]"
+            >
+              <X className="h-3 w-3" />
+            </button>
+          </>
+        ) : (
           <label
-            className={cn(
-              "shrink-0 cursor-pointer rounded px-1.5 py-0.5 text-xs tabular-nums",
-              overdue
-                ? "bg-[var(--color-nocheck-soft)] text-[var(--color-nocheck)]"
-                : "text-[var(--muted)] hover:bg-black/5",
-            )}
-            title={todo.completed ? "Date" : "Change date"}
-          >
-            {formatDDMMYY(todo.date)}
-            <input
-              type="date"
-              value={todo.date}
-              onChange={(e) =>
-                void updateTodo(todo.id, { date: e.target.value || null })
-              }
-              className="sr-only"
-            />
-          </label>
-        )}
-        {!todo.date && (
-          <label
-            className="shrink-0 cursor-pointer rounded px-1 py-0.5 text-xs text-[var(--muted)] hover:bg-black/5"
+            className="mt-0.5 shrink-0 cursor-pointer rounded px-1 py-0.5 text-xs text-[var(--muted)] hover:bg-black/5"
             title="Set date"
           >
             ＋date
@@ -145,7 +170,7 @@ export function TodoItem({
           onClick={() => void deleteTodo(todo.id)}
           aria-label="Delete todo"
           title="Delete (unblocks children)"
-          className="shrink-0 text-[var(--muted)] hover:text-[var(--color-nocheck)]"
+          className="mt-0.5 shrink-0 text-[var(--muted)] hover:text-[var(--color-nocheck)]"
         >
           <Trash2 className="h-4 w-4" />
         </button>
@@ -155,9 +180,9 @@ export function TodoItem({
         <BlockerPicker
           todos={todos}
           selfId={todo.id}
-          value={todo.blockerId}
+          value={{ blockerId: todo.blockerId, blockerText: todo.blockerText ?? null }}
           onChange={changeBlocker}
-          className="h-7 max-w-[16rem] rounded border border-[var(--border)] bg-[var(--card)] px-1.5 text-xs text-[var(--muted)]"
+          className="h-7 w-56 max-w-full rounded border border-[var(--border)] bg-[var(--card)] px-1.5 text-xs text-[var(--muted)] outline-none focus:border-[var(--color-check)]"
         />
         {error && (
           <span className="text-xs text-[var(--color-nocheck)]" role="alert">

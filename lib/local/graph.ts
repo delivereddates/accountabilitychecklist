@@ -52,14 +52,34 @@ export function buildForest(todos: TodoRecord[]): TodoForest {
   return { roots, childrenOf };
 }
 
-/** A todo is blocked while its blocker exists, isn't deleted, isn't completed. */
+/**
+ * A todo is blocked while its blocker exists, isn't deleted, isn't completed.
+ * A free-text blocker (blockerText) always blocks — nothing to complete, so
+ * it clears only manually. Truthiness also covers pre-blockerText local rows
+ * where the field is undefined.
+ */
 export function isBlocked(
   todo: TodoRecord,
   byId: Map<string, TodoRecord>,
 ): boolean {
+  if (todo.blockerText) return true;
   if (!todo.blockerId) return false;
   const b = byId.get(todo.blockerId);
   return !!b && !b.deleted && !b.completed;
+}
+
+/** Human label for the blocker: the referenced todo's current text, or the
+ *  free text. Null when there's no (resolvable) blocker to show. */
+export function blockerLabel(
+  todo: TodoRecord,
+  byId: Map<string, TodoRecord>,
+): string | null {
+  if (todo.blockerId) {
+    const b = byId.get(todo.blockerId);
+    if (b && !b.deleted) return b.text;
+    return null;
+  }
+  return todo.blockerText || null;
 }
 
 /** All transitive children of `todoId` (direct children + their children…). */

@@ -587,6 +587,7 @@ function mapTodoRow(row: TodoRow): TodoRecord {
     completedAt: row.completed_at,
     date: row.date,
     blockerId: row.blocker_id,
+    blockerText: row.blocker_text,
     sortOrder: row.sort_order,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
@@ -720,6 +721,7 @@ export async function insertApiTodo(
       completed_at: null,
       date: input.date,
       blocker_id: null,
+      blocker_text: null,
       sort_order: 0,
       created_at: now,
       updated_at: now,
@@ -795,6 +797,7 @@ export async function insertApiEvent(
 interface TodoRow {
   id: string; user_id: string; text: string; completed: boolean;
   completed_at: number | null; date: string | null; blocker_id: string | null;
+  blocker_text: string | null;
   sort_order: number; created_at: number; updated_at: number; deleted: boolean;
 }
 interface EventRow {

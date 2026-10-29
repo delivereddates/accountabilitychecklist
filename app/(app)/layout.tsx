@@ -10,12 +10,20 @@ import { useDashboard } from "@/lib/use-dashboard";
  * Triggers the initial /api/dashboard fetch once per document load. Combined
  * with revalidateOnMount:false / revalidateIfStale:false below, tabs never
  * refetch on their own — they read the cache. (Daily also calls mutate() to
- * resync when it's opened.) Returns nothing.
+ * resync when it's opened.) The fetch is deferred until the browser is idle:
+ * it's a large payload, and firing it alongside the navbar's route
+ * prefetches right after load is what made the first tab tap feel slow.
+ * Returns nothing.
  */
 function DataLoader() {
   const { mutate } = useDashboard();
   useEffect(() => {
-    mutate();
+    if (typeof requestIdleCallback === "function") {
+      const id = requestIdleCallback(() => void mutate(), { timeout: 2000 });
+      return () => cancelIdleCallback(id);
+    }
+    const t = setTimeout(() => void mutate(), 1500);
+    return () => clearTimeout(t);
   }, [mutate]);
   return null;
 }

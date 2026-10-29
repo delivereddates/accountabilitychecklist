@@ -49,7 +49,12 @@ type ProductivityDbShape = ReturnType<typeof getDb>;
 
 export async function createTodo(
   userId: string,
-  input: { text: string; date?: string | null; blockerId?: string | null },
+  input: {
+    text: string;
+    date?: string | null;
+    blockerId?: string | null;
+    blockerText?: string | null;
+  },
 ): Promise<string> {
   const db = getDb();
   const id = newId();
@@ -64,6 +69,7 @@ export async function createTodo(
     completedAt: null,
     date: input.date ?? null,
     blockerId: input.blockerId ?? null,
+    blockerText: input.blockerText ?? null,
     sortOrder: 0,
     createdAt: now,
     updatedAt: now,
@@ -78,7 +84,7 @@ export async function createTodo(
 }
 
 export type TodoPatch = Partial<
-  Pick<TodoRecord, "text" | "date" | "blockerId" | "sortOrder">
+  Pick<TodoRecord, "text" | "date" | "blockerId" | "blockerText" | "sortOrder">
 >;
 
 export async function updateTodo(id: string, patch: TodoPatch): Promise<void> {
@@ -86,6 +92,7 @@ export async function updateTodo(id: string, patch: TodoPatch): Promise<void> {
   await db.transaction("rw", db.todos, db.outbox, async () => {
     const cur = await db.todos.get(id);
     if (!cur || cur.deleted) return;
+    // Only a blockerId (a graph edge) can loop; blockerText never can.
     if (patch.blockerId !== undefined && patch.blockerId !== cur.blockerId) {
       const all = await db.todos.where("userId").equals(cur.userId).toArray();
       const byId = new Map(

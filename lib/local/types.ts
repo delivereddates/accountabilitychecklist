@@ -26,6 +26,9 @@ export interface TodoRecord extends BaseRecord {
   date: string | null;
   /** Single blocker: this todo depends on that todo. No FK — see plan. */
   blockerId: string | null;
+  /** Free-text blocker that isn't a todo ("waiting on the visa"). Set XOR
+   *  blockerId; unblocks only when cleared manually. */
+  blockerText: string | null;
   sortOrder: number;
 }
 

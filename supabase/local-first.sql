@@ -17,6 +17,9 @@
 -- on (single blocker ⇒ dependency tree). Deliberately NO foreign key on
 -- blocker_id: last-write-wins rows can arrive in any order across devices,
 -- so references are resolved client-side (missing/deleted ref ⇒ "no blocker").
+-- blocker_text is the free-text alternative: a blocker that isn't a todo
+-- ("waiting on the visa"). Exactly one of the two is ever set; a text
+-- blocker unblocks only when cleared manually (nothing to complete).
 -- ---------------------------------------------------------------------------
 create table if not exists public.todos (
   id           uuid primary key,
@@ -26,12 +29,15 @@ create table if not exists public.todos (
   completed_at bigint,
   date         date,
   blocker_id   uuid,
+  blocker_text text,
   sort_order   double precision not null default 0,
   created_at   bigint not null,
   updated_at   bigint not null,
   deleted      boolean not null default false,
   synced_at    timestamptz not null default now()
 );
+-- The alter covers databases created before blocker_text existed.
+alter table public.todos add column if not exists blocker_text text;
 create index if not exists todos_user_synced_idx on public.todos(user_id, synced_at);
 
 -- ---------------------------------------------------------------------------
@@ -144,12 +150,13 @@ begin
 
   for r in select * from jsonb_array_elements(p_todos) loop
     insert into public.todos (id, user_id, text, completed, completed_at, date, blocker_id,
-                              sort_order, created_at, updated_at, deleted)
+                              blocker_text, sort_order, created_at, updated_at, deleted)
     values ((r->>'id')::uuid, p_user_id, coalesce(r->>'text',''),
             coalesce((r->>'completed')::boolean, false),
             (r->>'completedAt')::bigint,
             nullif(r->>'date','')::date,
             nullif(r->>'blockerId','')::uuid,
+            nullif(r->>'blockerText',''),
             coalesce((r->>'sortOrder')::double precision, 0),
             (r->>'createdAt')::bigint, (r->>'updatedAt')::bigint,
             coalesce((r->>'deleted')::boolean, false))
@@ -157,6 +164,11 @@ begin
       set text = excluded.text, completed = excluded.completed,
           completed_at = excluded.completed_at, date = excluded.date,
           blocker_id = excluded.blocker_id, sort_order = excluded.sort_order,
+          -- Key-presence guard: a push from a pre-blockerText client (whose
+          -- rows never carried the key) must not wipe an existing text
+          -- blocker, while a push that DOES carry the key may null it out.
+          blocker_text = case when r ? 'blockerText'
+                              then excluded.blocker_text else todos.blocker_text end,
           updated_at = excluded.updated_at, deleted = excluded.deleted,
           synced_at = now()
       where excluded.updated_at > todos.updated_at;

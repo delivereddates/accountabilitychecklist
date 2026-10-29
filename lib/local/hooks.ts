@@ -72,6 +72,26 @@ export function useSyncStatus() {
   return { ...status, pending };
 }
 
+// /api/me confirmation runs ONCE per document load. Every tab mounts
+// useLocalUserId, but a single fetch heals the cache for all of them — and
+// stops a network round trip from tagging along on every navigation.
+let meCheck: Promise<void> | null = null;
+
+function confirmUserIdOnce(): void {
+  meCheck ??= fetch("/api/me")
+    .then(async (res) => {
+      if (!res.ok) return;
+      const data = (await res.json().catch(() => null)) as {
+        userId?: string;
+      } | null;
+      const id = data?.userId;
+      if (id && id !== readLocalUserId()) writeLocalUserId(id);
+    })
+    .catch(() => {
+      meCheck = null; // offline — a later mount retries
+    });
+}
+
 /**
  * The logged-in user's id, client-side. Served from the localStorage cache
  * (instant on every load after the first) and confirmed against /api/me on
@@ -87,24 +107,7 @@ export function useLocalUserId(): string | null {
     () => null,
   );
   useEffect(() => {
-    let alive = true;
-    fetch("/api/me")
-      .then(async (res) => {
-        if (!res.ok) return null;
-        return (await res.json().catch(() => null)) as {
-          userId?: string;
-        } | null;
-      })
-      .then((data) => {
-        const id = data?.userId;
-        if (alive && id && id !== readLocalUserId()) writeLocalUserId(id);
-      })
-      .catch(() => {
-        // Offline — the cached id (if any) keeps working.
-      });
-    return () => {
-      alive = false;
-    };
+    confirmUserIdOnce();
   }, []);
   return uid;
 }

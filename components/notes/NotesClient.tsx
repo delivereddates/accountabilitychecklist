@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import dynamic from "next/dynamic";
 import { CloudOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
@@ -12,7 +13,11 @@ import {
 } from "@/lib/local/hooks";
 import { FolderSidebar } from "./FolderSidebar";
 import { buildFolderTree } from "./folderTree";
-import { NoteEditor } from "./NoteEditor";
+
+// The Tiptap editor is by far the heaviest chunk in the app (~276 KB); lazy
+// it so tapping the Notes tab loads just the list, and the editor bundle
+// downloads on first note open instead.
+const NoteEditor = dynamic(() => import("./NoteEditor").then((m) => m.NoteEditor));
 
 /**
  * The notes home is one page: the folder tree. Folders expand to show their
@@ -52,12 +57,7 @@ export function NotesClient() {
 
   return (
     <div className="mx-auto max-w-6xl">
-      <header className="mb-4 flex items-center gap-3">
-        <h1 className="text-lg font-semibold tracking-tight">Notes</h1>
-        <span className="text-sm text-[var(--muted)]">
-          {(notes ?? []).length} note{(notes ?? []).length === 1 ? "" : "s"}
-        </span>
-      </header>
+      <h1 className="mb-4 text-lg font-semibold tracking-tight">Notes</h1>
 
       {!storageOk && (
         <p className="mb-4 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--muted)]">
