@@ -30,8 +30,9 @@ export interface TodoRecord extends BaseRecord {
    *  blockerId; unblocks only when cleared manually. */
   blockerText: string | null;
   /** Priority tag: "high" pins the todo above Current's date buckets, "low"
-   *  parks it in the Low priority section. Absent on rows created before the
-   *  field existed — comparisons are equality, so undefined behaves as null. */
+   *  moves it to the Low view (excluded from Current/Dated/Blocked). Absent
+   *  on rows created before the field existed — comparisons are equality, so
+   *  undefined behaves as null. */
   priority: "high" | "low" | null;
   sortOrder: number;
 }

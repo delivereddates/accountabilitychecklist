@@ -35,14 +35,35 @@ export function TodoEditDialog({
   const [error, setError] = useState<string | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
-  // Auto-grow to the text and drop the caret at the end, ready to append.
+  // Auto-grow to the text; only pointer-precise devices get focus + the
+  // caret at the end. On a phone the on-screen keyboard would immediately
+  // cover half the sheet — there it stays down until the text is tapped.
   useEffect(() => {
     const el = textRef.current;
     if (!el) return;
-    el.focus();
-    el.setSelectionRange(el.value.length, el.value.length);
     el.style.height = "0px";
     el.style.height = `${el.scrollHeight}px`;
+    if (!window.matchMedia("(pointer: coarse)").matches) {
+      el.focus();
+      el.setSelectionRange(el.value.length, el.value.length);
+    }
+  }, []);
+
+  // Freeze the page behind the sheet. Without this, the keyboard appearing
+  // or dismissing scrolls (and snap-restores) the document under the fixed
+  // overlay, so the whole sheet looks like it jumps whenever focus moves.
+  useEffect(() => {
+    const { body } = document;
+    const prevOverflow = body.style.overflow;
+    const prevPaddingRight = body.style.paddingRight;
+    body.style.overflow = "hidden";
+    // Desktop: pay for the scrollbar the freeze just removed.
+    const scrollbar = window.innerWidth - document.documentElement.clientWidth;
+    if (scrollbar > 0) body.style.paddingRight = `${scrollbar}px`;
+    return () => {
+      body.style.overflow = prevOverflow;
+      body.style.paddingRight = prevPaddingRight;
+    };
   }, []);
 
   // No dependency array on purpose: re-bind each render so `close` is fresh.
@@ -84,7 +105,7 @@ export function TodoEditDialog({
         if (e.target === e.currentTarget) close();
       }}
     >
-      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:rounded-2xl">
+      <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:rounded-2xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
             Edit todo

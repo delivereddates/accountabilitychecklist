@@ -5,18 +5,19 @@ import { toISODate } from "@/lib/utils";
 import type { TodoRecord } from "@/lib/local/types";
 import { TodoItem } from "./TodoItem";
 
-export type ListView = "current" | "dated" | "blocked";
+export type ListView = "current" | "dated" | "blocked" | "low";
 
 /**
- * Flat list for the three tab views.
+ * Flat list for the four tab views.
  *  - Current: the working set — unblocked todos that are undated, past due,
  *    or due within a week, bucketed High priority (pinned above everything)
- *    / Overdue / Today / Tomorrow / Next 7 days / No date / Low priority
- *    (parked at the bottom). Tagged todos leave their date bucket for a
- *    priority bucket.
+ *    / Overdue / Today / Tomorrow / Next 7 days / No date.
  *  - Dated: the forward schedule — everything dated today or later, in date
  *    order. Past-due todos are Current-only (the Overdue bucket).
  *  - Blocked: everything locked by a live blocker.
+ *  - Low: the parking lot — every low-priority todo in one flat list. Low
+ *    items are excluded from the other three views entirely; tagging
+ *    something Low moves it out of sight until it's promoted.
  * Each ends with a "Done" section under the same filter.
  */
 export function TodoList({
@@ -38,16 +39,20 @@ export function TodoList({
 
   const inView = (t: TodoRecord) =>
     variant === "current"
-      ? !isBlocked(t, byId) && (!t.date || t.date <= weekOut)
+      ? !isBlocked(t, byId) && (!t.date || t.date <= weekOut) && t.priority !== "low"
       : variant === "dated"
         ? // Open past-due todos live in Current's Overdue bucket only; done
           // ones stay (a completed todo is never "overdue").
-          !!t.date && (t.completed || t.date >= today)
-        : isBlocked(t, byId);
+          !!t.date && (t.completed || t.date >= today) && t.priority !== "low"
+        : variant === "blocked"
+          ? isBlocked(t, byId) && t.priority !== "low"
+          : t.priority === "low";
 
   const open = todos.filter((t) => !t.completed && inView(t));
   const done = todos.filter((t) => t.completed && inView(t));
-  const plain = open.filter((t) => !t.priority); // untagged keep the date buckets
+  // High is pinned in its own bucket; low is out of this view entirely, so
+  // everything else keeps the date buckets.
+  const plain = open.filter((t) => t.priority !== "high");
 
   const buckets =
     variant === "current"
@@ -66,16 +71,17 @@ export function TodoList({
             ),
           },
           { label: "No date", items: plain.filter((t) => !t.date) },
-          { label: "Low priority", items: open.filter((t) => t.priority === "low") },
         ].filter((b) => b.items.length > 0)
       : [];
 
   const emptyLabel =
     variant === "current"
-      ? "Nothing current — everything is blocked, dated beyond a week, or done."
+      ? "Nothing current — everything is blocked, low priority, dated beyond a week, or done."
       : variant === "dated"
         ? "Nothing dated today or later — past-due lives in Current."
-        : "Nothing blocked.";
+        : variant === "blocked"
+          ? "Nothing blocked."
+          : "No low-priority todos.";
 
   return (
     <div className="flex flex-col gap-6">

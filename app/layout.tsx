@@ -21,6 +21,10 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
+  // Android/Chrome: shrink the page when the on-screen keyboard opens, so
+  // dvh-sized overlays (the todo edit sheet) sit above it instead of behind
+  // it. Ignored by iOS Safari, which overlays regardless.
+  interactiveWidget: "resizes-content",
 };
 
 export const metadata: Metadata = {

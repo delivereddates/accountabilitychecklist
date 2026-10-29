@@ -10,12 +10,13 @@ import { TodoList } from "./TodoList";
 import { TodoTree } from "./TodoTree";
 import { TodoEditDialog } from "./TodoEditDialog";
 
-type View = "current" | "dated" | "blocked" | "tree";
+type View = "current" | "dated" | "blocked" | "low" | "tree";
 
 const VIEWS: { key: View; label: string }[] = [
   { key: "current", label: "Current" },
   { key: "dated", label: "Dated" },
   { key: "blocked", label: "Blocked" },
+  { key: "low", label: "Low" },
   { key: "tree", label: "Tree" },
 ];
 
