@@ -38,7 +38,13 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-dvh items-center justify-center bg-[var(--background)] px-4 py-8">
+    /* Top-anchored on phones (centered only on ≥sm): with a centered card,
+       the keyboard opening (Android resizes-content) or iOS's toolbar
+       animating in changes dvh, which re-centers the card under your finger
+       — the page "jumps" the moment you tap a field. Anchored to a fixed
+       top padding, nothing re-centers; the browser just scrolls the tapped
+       field into view. */
+    <div className="flex min-h-dvh items-start justify-center bg-[var(--background)] px-4 pb-8 pt-[4.5rem] sm:items-center sm:pt-8">
       <div className="w-full max-w-sm">
         <div className="mb-6 flex flex-col items-center text-center">
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-check-soft)]">

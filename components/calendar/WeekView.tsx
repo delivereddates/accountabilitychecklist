@@ -15,10 +15,13 @@ const HOUR_H = 48; // px per hour row — 24h totals 1152px, scrolled container
  *
  * ONE scroll container holds the weekday header, the all-day row, and the
  * hour grid: every row is a grid over the same containing block with the
- * same tracks, so the columns cannot drift apart (a separate scroll area
- * for the hours reserves scrollbar width that the outer rows don't, which
- * is what misaligned the all-day cells). The header + all-day block sticks
- * to the top while the hours scroll.
+ * same tracks, so the columns cannot drift apart. Tracks are minmax(0,1fr),
+ * NOT 1fr: a plain 1fr floors each track at its cells' min-content, and the
+ * all-day chips are nowrap (truncate) — one long title made ONLY the
+ * all-day row's columns grow past the shared width and drift right of the
+ * hour grid. minmax(0,1fr) makes every row's tracks content-independent and
+ * identical; long chips just clip. The header + all-day block sticks to the
+ * top while the hours scroll.
  */
 export function WeekView({
   days,
@@ -63,7 +66,7 @@ export function WeekView({
           {/* Weekday headers + all-day row, pinned to the top while the
               hours scroll. Same grid tracks as the hour grid below. */}
           <div className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--card)]">
-            <div className="grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)]">
+            <div className="grid grid-cols-[3rem_repeat(7,minmax(0,1fr))] divide-x divide-[var(--border)]">
               <div className="bg-[var(--card)]" />
               {days.map((iso) => (
                 <div
@@ -80,7 +83,7 @@ export function WeekView({
               ))}
             </div>
 
-            <div className="grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)] border-t border-[var(--border)]">
+            <div className="grid grid-cols-[3rem_repeat(7,minmax(0,1fr))] divide-x divide-[var(--border)] border-t border-[var(--border)]">
               <div className="bg-[var(--card)] p-1 text-center text-[0.6rem] uppercase text-[var(--muted)]">
                 all day
               </div>
@@ -120,7 +123,7 @@ export function WeekView({
           </div>
 
           {/* Hour grid */}
-          <div className="grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)]">
+          <div className="grid grid-cols-[3rem_repeat(7,minmax(0,1fr))] divide-x divide-[var(--border)]">
             {/* hour labels */}
             <div>
               {Array.from({ length: 24 }, (_, h) => (

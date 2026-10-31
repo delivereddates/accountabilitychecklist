@@ -75,7 +75,9 @@ export function TodosClient() {
               key={v.key}
               onClick={() => chooseView(v.key)}
               className={cn(
-                "rounded-md px-2 py-1 transition-colors",
+                // flex-1 spreads the five labels evenly across the phone's
+                // full-width strip (without it they crowd the left edge).
+                "flex-1 rounded-md px-2 py-1 text-center transition-colors sm:flex-none",
                 view === v.key
                   ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
                   : "text-[var(--muted)]",
