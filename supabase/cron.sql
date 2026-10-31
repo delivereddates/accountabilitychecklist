@@ -13,9 +13,8 @@ create extension if not exists pg_cron with schema pg_catalog;
 create extension if not exists pg_net;
 
 -- Idempotent reschedule: drop any previous job (current and pre-rename
--- "accountability-notify" name), then re-create. The URL assumes the Vercel
--- project has been renamed to "olives" (default domain olives.vercel.app);
--- if you keep the old project name, keep the old URL here too.
+-- "accountability-notify" name), then re-create. The URL is the production
+-- domain after the Vercel rename (olivesapp.vercel.app).
 select cron.unschedule('accountability-notify')
  where exists (select 1 from cron.job where jobname = 'accountability-notify');
 
@@ -27,7 +26,7 @@ select cron.schedule(
   '0 * * * *',
   $$
   select net.http_post(
-    url      := 'https://olives.vercel.app/api/cron/notify',
+    url      := 'https://olivesapp.vercel.app/api/cron/notify',
     headers  := jsonb_build_object(
                   'Content-Type', 'application/json',
                   'Authorization', 'Bearer ' || 'REPLACE_WITH_CRON_SECRET'
