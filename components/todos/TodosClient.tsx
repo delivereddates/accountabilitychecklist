@@ -64,36 +64,37 @@ export function TodosClient() {
 
   return (
     <div className="mx-auto max-w-3xl">
-      <header className="mb-4 flex flex-wrap items-center gap-3">
+      <header className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
         <h1 className="text-lg font-semibold tracking-tight">Todos</h1>
         {todos !== undefined && (
           <span className="text-sm text-[var(--muted)]">{openCount} open</span>
         )}
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            onClick={() => setAdding(true)}
-            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-xs font-semibold text-white"
-          >
-            <Plus className="h-3.5 w-3.5" />
-            Add
-          </button>
-          <div className="flex rounded-lg border border-[var(--border)] p-0.5 text-xs">
-            {VIEWS.map((v) => (
-              <button
-                key={v.key}
-                onClick={() => chooseView(v.key)}
-                className={cn(
-                  "rounded-md px-2 py-1 transition-colors",
-                  view === v.key
-                    ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
-                    : "text-[var(--muted)]",
-                )}
-              >
-                {v.label}
-              </button>
-            ))}
-          </div>
+        <div className="order-2 flex w-full rounded-lg border border-[var(--border)] p-0.5 text-xs sm:order-none sm:ml-auto sm:w-auto">
+          {VIEWS.map((v) => (
+            <button
+              key={v.key}
+              onClick={() => chooseView(v.key)}
+              className={cn(
+                "rounded-md px-2 py-1 transition-colors",
+                view === v.key
+                  ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
+                  : "text-[var(--muted)]",
+              )}
+            >
+              {v.label}
+            </button>
+          ))}
         </div>
+        {/* Phones: the tabs wrap to their own row below, and order keeps Add
+            on the title line (ml-auto = far right). Desktop: tabs ml-auto,
+            Add right beside them. */}
+        <button
+          onClick={() => setAdding(true)}
+          className="order-1 ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-xs font-semibold text-white sm:order-none sm:ml-0"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          Add
+        </button>
       </header>
 
       {!storageOk && (

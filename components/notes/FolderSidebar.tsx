@@ -32,7 +32,6 @@ import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import {
   createFolder,
-  createNote,
   deleteFolder,
   renameFolder,
   updateNote,
@@ -44,10 +43,10 @@ import type { FolderTree, FolderTreeNode } from "./folderTree";
  * The notes home page — one tree, no separate list view. Unfiled notes sit
  * at the base level under an expandable "Unfiled" row; expanding a folder
  * reveals its contents inline (subfolders first, then the notes directly
- * inside it). Clicking a folder's name selects it — that's where the "New
- * note" button files the note — and opens it if it was collapsed. Row counts
- * roll up the whole subtree. Deleting a folder keeps its notes (they become
- * unfiled) and moves its subfolders up one level.
+ * inside it). Clicking a folder's name selects it — that's where the
+ * header's "New note" button files the note — and opens it if it was
+ * collapsed. Row counts roll up the whole subtree. Deleting a folder keeps
+ * its notes (they become unfiled) and moves its subfolders up one level.
  *
  * Every section (Unfiled, each folder) is drag-reorderable: never-dragged
  * rows order by last modified (newest first), and one drag renumbers the
@@ -60,6 +59,8 @@ export function FolderSidebar({
   notes,
   selected,
   onSelect,
+  collapsed,
+  onToggleCollapsed,
   selectedNoteId,
   onOpenNote,
 }: {
@@ -68,10 +69,11 @@ export function FolderSidebar({
   notes: NoteRecord[];
   selected: string | "unfiled";
   onSelect: (folderId: string | "unfiled") => void;
+  collapsed: Set<string>;
+  onToggleCollapsed: (id: string) => void;
   selectedNoteId: string | null;
   onOpenNote: (id: string) => void;
 }) {
-  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   // null = not adding; "root" or a folder id = where the new folder goes.
   const [addingAt, setAddingAt] = useState<string | null>(null);
   const [newName, setNewName] = useState("");
@@ -123,33 +125,11 @@ export function FolderSidebar({
     }
   }
 
-  // New note goes into the selected folder (or Unfiled), which expands so
-  // the note is visible in the tree when the editor closes.
-  async function addNote() {
-    const target = selected === "unfiled" ? null : selected;
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      next.delete(selected);
-      return next;
-    });
-    const id = await createNote(userId, target);
-    if (id) onOpenNote(id);
-  }
-
   function commitAdd(parentId: string | null) {
     const name = newName.trim();
     setNewName("");
     setAddingAt(null);
     if (name) void createFolder(userId, name, parentId);
-  }
-
-  function toggle(id: string) {
-    setCollapsed((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
   }
 
   function renderNote(note: NoteRecord, depth: number): React.ReactNode {
@@ -179,7 +159,7 @@ export function FolderSidebar({
           style={{ paddingLeft: depth * 14 }}
         >
           <button
-            onClick={() => expandable && toggle(f.id)}
+            onClick={() => expandable && onToggleCollapsed(f.id)}
             title={
               expandable ? (isCollapsed ? "Expand" : "Collapse") : undefined
             }
@@ -216,7 +196,7 @@ export function FolderSidebar({
             <button
               onClick={() => {
                 onSelect(f.id);
-                if (isCollapsed) toggle(f.id);
+                if (isCollapsed) onToggleCollapsed(f.id);
               }}
               onDoubleClick={() => {
                 setRenamingId(f.id);
@@ -303,14 +283,6 @@ export function FolderSidebar({
 
   return (
     <aside className="flex w-full flex-col gap-0.5 md:w-64">
-      <button
-        onClick={() => void addNote()}
-        className="mb-2 inline-flex h-8 shrink-0 self-start items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-xs font-semibold text-white"
-      >
-        <Plus className="h-3.5 w-3.5" />
-        New note
-      </button>
-
       <DndContext
         sensors={sensors}
         collisionDetection={closestCenter}
@@ -319,7 +291,9 @@ export function FolderSidebar({
         <div>
           <div className="flex items-center gap-0.5">
             <button
-              onClick={() => unfiledNotes.length > 0 && toggle("unfiled")}
+              onClick={() =>
+                unfiledNotes.length > 0 && onToggleCollapsed("unfiled")
+              }
               title={unfiledOpen ? "Collapse" : "Expand"}
               className={cn(
                 "flex h-5 w-4 shrink-0 items-center justify-center text-[var(--muted)]",
@@ -336,7 +310,8 @@ export function FolderSidebar({
             <button
               onClick={() => {
                 onSelect("unfiled");
-                if (!unfiledOpen && unfiledNotes.length > 0) toggle("unfiled");
+                if (!unfiledOpen && unfiledNotes.length > 0)
+                  onToggleCollapsed("unfiled");
               }}
               className={cn(
                 "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",

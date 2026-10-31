@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import dynamic from "next/dynamic";
-import { CloudOff } from "lucide-react";
+import { CloudOff, Plus } from "lucide-react";
 import { cn } from "@/lib/utils";
 import {
   useFolders,
@@ -11,6 +11,7 @@ import {
   useNotes,
   useStorageAvailable,
 } from "@/lib/local/hooks";
+import { createNote } from "@/lib/local/mutations";
 import { FolderSidebar } from "./FolderSidebar";
 import { buildFolderTree } from "./folderTree";
 
@@ -21,7 +22,7 @@ const NoteEditor = dynamic(() => import("./NoteEditor").then((m) => m.NoteEditor
 
 /**
  * The notes home is one page: the folder tree. Folders expand to show their
- * notes inline, unfiled notes sit at the base level, and the tree's "New
+ * notes inline, unfiled notes sit at the base level, and the header's "New
  * note" button files into the selected folder — there is no separate flat
  * list view. md+ shows tree + editor side by side; phones swap between tree
  * and the open note's editor. `?id=` deep-links a note (used by the calendar
@@ -38,6 +39,32 @@ export function NotesClient() {
   const [folder, setFolder] = useState<string | "unfiled">("unfiled");
   const paramId = searchParams.get("id");
   const [selectedId, setSelectedId] = useState<string | null>(paramId);
+  // Which tree rows are collapsed — held here (not in FolderSidebar) so the
+  // header's "New note" can expand the target folder before creating.
+  const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+
+  function toggleCollapsed(id: string) {
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  }
+
+  // New note goes into the selected folder (or Unfiled), which expands so
+  // the note is visible in the tree when the editor closes.
+  async function addNote() {
+    if (!userId) return;
+    const target = folder === "unfiled" ? null : folder;
+    setCollapsed((prev) => {
+      const next = new Set(prev);
+      next.delete(folder);
+      return next;
+    });
+    const id = await createNote(userId, target);
+    if (id) setSelectedId(id);
+  }
 
   const tree = useMemo(() => buildFolderTree(folders ?? []), [folders]);
   // A deleted (or mid-sync) selection browses Unfiled until re-picked.
@@ -46,18 +73,18 @@ export function NotesClient() {
 
   const selected = (notes ?? []).find((n) => n.id === selectedId) ?? null;
 
-  if (!userId) {
-    return (
-      <div className="mx-auto max-w-6xl">
-        <h1 className="mb-4 text-lg font-semibold tracking-tight">Notes</h1>
-        <p className="text-sm text-[var(--muted)]">Loading…</p>
-      </div>
-    );
-  }
-
   return (
     <div className="mx-auto max-w-6xl">
-      <h1 className="mb-4 text-lg font-semibold tracking-tight">Notes</h1>
+      <header className="mb-4 flex items-center gap-3">
+        <h1 className="text-lg font-semibold tracking-tight">Notes</h1>
+        <button
+          onClick={() => void addNote()}
+          className="ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-xs font-semibold text-white"
+        >
+          <Plus className="h-3.5 w-3.5" />
+          New note
+        </button>
+      </header>
 
       {!storageOk && (
         <p className="mb-4 flex items-center gap-2 rounded-lg border border-[var(--border)] bg-[var(--card)] p-3 text-sm text-[var(--muted)]">
@@ -67,7 +94,7 @@ export function NotesClient() {
         </p>
       )}
 
-      {notes === undefined || folders === undefined ? (
+      {notes === undefined || folders === undefined || !userId ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
       ) : (
         <div className="flex flex-col gap-4 md:grid md:grid-cols-[16rem_1fr] md:items-start">
@@ -78,6 +105,8 @@ export function NotesClient() {
               notes={notes}
               selected={open}
               onSelect={setFolder}
+              collapsed={collapsed}
+              onToggleCollapsed={toggleCollapsed}
               selectedNoteId={selectedId}
               onOpenNote={setSelectedId}
             />

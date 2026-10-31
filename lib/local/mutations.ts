@@ -168,6 +168,34 @@ export async function deleteTodo(id: string): Promise<void> {
   schedulePush();
 }
 
+/**
+ * Bulk deleteTodo (the Done section's "Clear"): one transaction tombstones
+ * every id, then detaches anything blocked by a deleted todo.
+ */
+export async function deleteTodos(ids: string[]): Promise<void> {
+  if (ids.length === 0) return;
+  const db = getDb();
+  const now = nowMs();
+  const idSet = new Set(ids);
+  await db.transaction("rw", db.todos, db.outbox, async () => {
+    for (const cur of await db.todos.bulkGet(ids)) {
+      if (!cur) continue;
+      await db.todos.put({ ...cur, deleted: true, updatedAt: now });
+      await queue(db, "todos", cur.id);
+    }
+    const children = await db.todos
+      .filter(
+        (t) => t.blockerId !== null && idSet.has(t.blockerId) && !t.deleted,
+      )
+      .toArray();
+    for (const c of children) {
+      await db.todos.put({ ...c, blockerId: null, updatedAt: now });
+      await queue(db, "todos", c.id);
+    }
+  });
+  schedulePush();
+}
+
 // ---------------------------------------------------------------------------
 // Events
 // ---------------------------------------------------------------------------

@@ -46,7 +46,7 @@ export function MonthGrid({
         </div>
         <div className="grid grid-cols-7 gap-px rounded-xl border border-[var(--border)] bg-[var(--border)]">
           {cells.map((iso, i) => {
-            if (iso === null) return <div key={`empty-${i}`} className="min-h-14 bg-[var(--card)]/40 sm:min-h-20" />;
+            if (iso === null) return <div key={`empty-${i}`} className="min-h-16 bg-[var(--card)]/40 sm:min-h-24" />;
             const feed = feeds.get(iso) ?? [];
             const events = feed.filter((f) => f.kind === "event");
             const todos = feed.filter((f) => f.kind === "todo");
@@ -58,7 +58,7 @@ export function MonthGrid({
                 key={iso}
                 onClick={() => onSelect(iso)}
                 className={cn(
-                  "flex min-h-14 flex-col gap-0.5 overflow-hidden bg-[var(--card)] p-1 text-left align-top transition-colors hover:bg-black/[0.03] sm:min-h-20 sm:p-1.5",
+                  "flex min-h-16 flex-col gap-0.5 overflow-hidden bg-[var(--card)] p-1 text-left align-top transition-colors hover:bg-black/[0.03] sm:min-h-24 sm:p-1.5",
                   !inMonth && "opacity-40",
                   isToday && "bg-[var(--color-check-soft)]",
                   selected === iso && "ring-2 ring-inset ring-[var(--color-check)]",
@@ -72,18 +72,20 @@ export function MonthGrid({
                 >
                   {format(parseISO(iso), "d")}
                 </span>
-                {events.slice(0, 2).map((e) => (
+                {/* Times only (title on hover) — the day list below carries
+                    the details; green marks it as an event time. */}
+                {events.slice(0, 3).map((e) => (
                   <span
                     key={e.id}
-                    className="truncate rounded bg-[var(--color-check-soft)] px-0.5 text-[0.6rem] leading-[0.95rem] text-[var(--color-check)] sm:px-1 sm:text-[0.68rem] sm:leading-4"
+                    title={e.title}
+                    className="truncate text-[0.6rem] font-semibold leading-[0.95rem] text-[var(--color-check)] sm:text-[0.65rem] sm:leading-4"
                   >
-                    {e.time ? `${e.time} ` : ""}
-                    {e.title}
+                    {e.time ?? "all day"}
                   </span>
                 ))}
-                {events.length > 2 && (
+                {events.length > 3 && (
                   <span className="text-[0.6rem] leading-[0.95rem] text-[var(--muted)] sm:text-[0.68rem] sm:leading-4">
-                    +{events.length - 2} more
+                    +{events.length - 3} more
                   </span>
                 )}
                 {(todos.length > 0 || notes.length > 0) && (

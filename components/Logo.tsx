@@ -14,7 +14,7 @@ export function Logo({ className }: { className?: string }) {
     >
       <g
         stroke="currentColor"
-        strokeWidth={12}
+        strokeWidth={15}
         strokeLinecap="round"
         strokeLinejoin="round"
       >
@@ -37,16 +37,16 @@ export function Logo({ className }: { className?: string }) {
         />
 
         {/* Eyes */}
-        <circle cx={220} cy={275} r={10} fill="currentColor" stroke="none" />
-        <circle cx={280} cy={275} r={10} fill="currentColor" stroke="none" />
+        <circle cx={220} cy={275} r={12} fill="currentColor" stroke="none" />
+        <circle cx={280} cy={275} r={12} fill="currentColor" stroke="none" />
 
         {/* Smile */}
-        <path d="M225 315C235 340, 265 340, 275 315" strokeWidth={10} />
+        <path d="M225 315C235 340, 265 340, 275 315" strokeWidth={13} />
 
         {/* Highlight on the olive body */}
         <path
           d="M185 295C182 320, 190 348, 205 365"
-          strokeWidth={8}
+          strokeWidth={10}
           opacity={0.5}
         />
       </g>

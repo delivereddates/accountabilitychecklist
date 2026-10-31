@@ -20,7 +20,7 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import { cn, toISODate } from "@/lib/utils";
 import { isBlocked } from "@/lib/local/graph";
-import { updateTodo } from "@/lib/local/mutations";
+import { deleteTodos, updateTodo } from "@/lib/local/mutations";
 import type { TodoRecord } from "@/lib/local/types";
 import { TodoItemContent } from "./TodoItem";
 
@@ -153,10 +153,32 @@ export function TodoList({
       <div className="flex flex-col gap-6">
         {sections.map((s) => (
           <section key={s.key}>
-            {s.label && (
-              <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-                {s.label}
-              </h2>
+            {s.key === "done" ? (
+              <div className="mb-1 flex items-center justify-between">
+                <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                  {s.label}
+                </h2>
+                <button
+                  onClick={() => {
+                    if (
+                      window.confirm(
+                        `Delete all ${s.items.length} completed todos?`,
+                      )
+                    ) {
+                      void deleteTodos(s.items.map((t) => t.id));
+                    }
+                  }}
+                  className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)] transition-colors hover:text-[var(--color-nocheck)]"
+                >
+                  Clear
+                </button>
+              </div>
+            ) : (
+              s.label && (
+                <h2 className="mb-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
+                  {s.label}
+                </h2>
+              )
             )}
             <SortableContext
               items={s.items.map((t) => t.id)}

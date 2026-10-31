@@ -48,8 +48,10 @@ export function WeekView({
   return (
     <div className="overflow-x-auto">
       <div className="min-w-[44rem]">
-        {/* Weekday headers */}
-        <div className="grid grid-cols-[3rem_repeat(7,1fr)] gap-px border border-[var(--border)] bg-[var(--border)]">
+        {/* Weekday headers — same column tracks as the all-day row and hour
+            grid below (no gap-px anywhere: gaps would shift the 1fr columns
+            out of alignment with the ungapped hour grid). */}
+        <div className="grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)] border border-[var(--border)]">
           <div className="bg-[var(--card)]" />
           {days.map((iso) => (
             <div
@@ -67,7 +69,7 @@ export function WeekView({
         </div>
 
         {/* All-day row */}
-        <div className="my-px grid grid-cols-[3rem_repeat(7,1fr)] gap-px border border-[var(--border)] bg-[var(--border)]">
+        <div className="my-px grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)] border border-[var(--border)]">
           <div className="bg-[var(--card)] p-1 text-center text-[0.6rem] uppercase text-[var(--muted)]">
             all day
           </div>

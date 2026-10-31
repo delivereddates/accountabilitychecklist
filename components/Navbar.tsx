@@ -44,7 +44,7 @@ export function Navbar() {
           href="/calendar"
           className="mr-2 flex items-center gap-2 font-semibold tracking-tight"
         >
-          <Logo className="h-6 w-6" />
+          <Logo className="h-8 w-8" />
           <span className="hidden sm:inline">Olives</span>
         </Link>
 
