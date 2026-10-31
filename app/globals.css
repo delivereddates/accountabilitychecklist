@@ -45,6 +45,24 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
+/* Kill the double-tap-zoom wait on touch devices: without this, rapid taps
+   on small adjacent controls (the daily check/missed/exempt toggles, the
+   section letters) land late, on the wrong control, or as a page zoom. In
+   the base layer so per-element utilities still win (the drag grips need
+   their touch-none). */
+@layer base {
+  button,
+  [role="button"],
+  [role="tab"],
+  a,
+  label,
+  input,
+  select,
+  textarea {
+    touch-action: manipulation;
+  }
+}
+
 /* Thin, subtle scrollbars for dense grids. */
 * {
   scrollbar-width: thin;

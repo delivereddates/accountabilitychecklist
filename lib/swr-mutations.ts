@@ -1,6 +1,11 @@
 "use client";
 
-import { useDashboard, type DashboardData } from "./use-dashboard";
+import {
+  DASHBOARD_KEY,
+  fetchDashboard,
+  useDashboard,
+  type DashboardData,
+} from "./use-dashboard";
 import type { CompletionStatus, Task, TaskCompletion, TaskNote } from "./types";
 
 const EMPTY: DashboardData = {
@@ -14,9 +19,11 @@ const EMPTY: DashboardData = {
 // Mutation coordinator
 //
 // The frontend cache is the source of truth for the session. Toggles write to
-// the cache immediately and queue a debounced save. On 200 OK we do NOTHING
-// (never overwrite the cache with the response). We only reconcile (full
-// background re-fetch) when a save fails AND the network is idle.
+// the cache immediately and queue a debounced save; a write is only confirmed
+// by its 200 OK, and unconfirmed writes stay queued and retry with backoff —
+// a network dip must never visibly undo a tap. Any re-fetch overlays the
+// still-pending writes on the fresh snapshot, so a dashboard response that
+// left the server before a tap cannot land on top of it and clobber it.
 // ---------------------------------------------------------------------------
 
 type PendingWrite =
@@ -27,8 +34,10 @@ const DEBOUNCE_MS = 500;
 const pending = new Map<string, PendingWrite>();
 let timer: ReturnType<typeof setTimeout> | null = null;
 let inFlight = 0;
-let needsReconcile = false;
 let resyncRequested = false;
+// Grows after a failed flush batch (server/network down) so retries back off
+// instead of hot-looping; reset on the first success.
+let retryBackoff = 0;
 // Bound SWR mutate for the dashboard key (set on each useMutations call).
 let boundMutate: (() => Promise<unknown>) | null = null;
 
@@ -36,7 +45,7 @@ const keyOf = (taskId: string, date: string) => `${taskId}|${date}`;
 
 function scheduleFlush() {
   if (timer) clearTimeout(timer);
-  timer = setTimeout(flush, DEBOUNCE_MS);
+  timer = setTimeout(flush, DEBOUNCE_MS + retryBackoff);
 }
 
 async function flush() {
@@ -46,7 +55,6 @@ async function flush() {
     return;
   }
   const batch = Array.from(pending.values());
-  pending.clear();
   inFlight++;
   try {
     await Promise.all(
@@ -71,9 +79,19 @@ async function flush() {
         }
       }),
     );
-    // 200 OK → do nothing. Cache is authoritative.
+    // 200 OK → confirmed on the server. Drop only writes this batch saved:
+    // a key tapped again mid-flight holds a NEWER write object that is still
+    // unconfirmed and must stay queued (reference equality catches that).
+    for (const w of batch) {
+      const key = keyOf(w.taskId, w.date);
+      if (pending.get(key) === w) pending.delete(key);
+    }
+    retryBackoff = 0;
   } catch {
-    needsReconcile = true;
+    // Keep everything queued and retry with backoff — the cache (and thus
+    // the UI) keeps the optimistic state, so nothing visibly reverts.
+    retryBackoff = retryBackoff ? Math.min(retryBackoff * 2, 30_000) : 1_000;
+    scheduleFlush();
   } finally {
     inFlight--;
     maybeReconcile();
@@ -81,11 +99,10 @@ async function flush() {
 }
 
 function maybeReconcile() {
-  if (inFlight > 0 || pending.size > 0 || timer) return; // not idle yet
-  if (needsReconcile || resyncRequested) {
-    needsReconcile = false;
+  if (inFlight > 0 || pending.size > 0 || timer) return; // saves still settling
+  if (resyncRequested) {
     resyncRequested = false;
-    void boundMutate?.(); // full background re-fetch
+    void boundMutate?.(); // full background re-fetch (overlays pending)
   }
 }
 
@@ -106,8 +123,8 @@ export function resetCoordinator() {
     clearTimeout(timer);
     timer = null;
   }
-  needsReconcile = false;
   resyncRequested = false;
+  retryBackoff = 0;
 }
 
 /**
@@ -154,24 +171,29 @@ function redirectOn401() {
 
 export function useMutations() {
   const { mutate } = useDashboard();
-  boundMutate = () => mutate();
+  // The coordinator's re-fetch: fresh snapshot from the server, with any
+  // not-yet-confirmed toggles laid back on top in the same cache write (no
+  // flicker, no window for the response to visibly undo a tap). A fetch
+  // failure keeps the current cache as-is.
+  boundMutate = () =>
+    mutate(
+      async (cur) => {
+        try {
+          let next = await fetchDashboard(DASHBOARD_KEY);
+          for (const w of pending.values()) next = applyWrite(next, w);
+          return next;
+        } catch {
+          return cur ?? EMPTY;
+        }
+      },
+      { revalidate: false },
+    );
 
   const applyWrites = (writes: PendingWrite[]) => {
     mutate(
       (prev) => {
         let next = prev;
-        for (const w of writes) {
-          if (w.kind === "status") {
-            next = upsertCompletion(next, {
-              id: "tmp",
-              task_id: w.taskId,
-              date: w.date,
-              status: w.status,
-            });
-          } else {
-            next = removeCompletion(next, w.taskId, w.date);
-          }
-        }
+        for (const w of writes) next = applyWrite(next, w);
         return next;
       },
       { revalidate: false },
@@ -299,6 +321,21 @@ export function useMutations() {
 }
 
 // --- pure cache helpers (always return a full DashboardData) ---
+
+/** Fold one queued write into a dashboard snapshot. */
+function applyWrite(
+  cur: DashboardData | undefined,
+  w: PendingWrite,
+): DashboardData {
+  return w.kind === "status"
+    ? upsertCompletion(cur, {
+        id: "tmp",
+        task_id: w.taskId,
+        date: w.date,
+        status: w.status,
+      })
+    : removeCompletion(cur, w.taskId, w.date);
+}
 
 function upsertCompletion(
   cur: DashboardData | undefined,

@@ -12,7 +12,9 @@ export interface DashboardData {
   notes: TaskNote[];
 }
 
-async function fetcher(url: string): Promise<DashboardData> {
+/** Exported for the mutation coordinator, which re-fetches and overlays
+ *  still-pending local writes on the result (see lib/swr-mutations.ts). */
+export async function fetchDashboard(url: string): Promise<DashboardData> {
   const res = await fetch(url);
   if (res.status === 401) {
     // Session gone/expired — hard-navigate (full reload clears client state).
@@ -36,7 +38,7 @@ async function fetcher(url: string): Promise<DashboardData> {
  * auto-refresh) plus an explicit mutate() when returning to the Daily page.
  */
 export function useDashboard(opts?: { fallbackData?: DashboardData }) {
-  return useSWR<DashboardData>(DASHBOARD_KEY, fetcher, {
+  return useSWR<DashboardData>(DASHBOARD_KEY, fetchDashboard, {
     ...(opts?.fallbackData ? { fallbackData: opts.fallbackData } : null),
   });
 }

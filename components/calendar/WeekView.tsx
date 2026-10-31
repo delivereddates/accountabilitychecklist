@@ -12,6 +12,13 @@ const HOUR_H = 48; // px per hour row — 24h totals 1152px, scrolled container
  * Week view with hour slots (Monday-first). Timed events are positioned by
  * start/end minutes; all-day events + dated todos/notes sit in the top row.
  * Clicking an empty slot opens the event dialog prefilled to that half hour.
+ *
+ * ONE scroll container holds the weekday header, the all-day row, and the
+ * hour grid: every row is a grid over the same containing block with the
+ * same tracks, so the columns cannot drift apart (a separate scroll area
+ * for the hours reserves scrollbar width that the outer rows don't, which
+ * is what misaligned the all-day cells). The header + all-day block sticks
+ * to the top while the hours scroll.
  */
 export function WeekView({
   days,
@@ -35,7 +42,8 @@ export function WeekView({
     return d.getHours() * 60 + d.getMinutes();
   }, [days, today]);
 
-  // Auto-scroll to ~07:00 so the working day is centered on open.
+  // Auto-scroll to ~07:00 so the working day is centered on open (the sticky
+  // header overlays the first rows, so 07:00 lands right beneath it).
   useEffect(() => {
     if (scroller.current) scroller.current.scrollTop = 6.5 * HOUR_H;
   }, []);
@@ -46,70 +54,73 @@ export function WeekView({
   );
 
   return (
-    <div className="overflow-x-auto">
-      <div className="min-w-[44rem]">
-        {/* Weekday headers — same column tracks as the all-day row and hour
-            grid below (no gap-px anywhere: gaps would shift the 1fr columns
-            out of alignment with the ungapped hour grid). */}
-        <div className="grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)] border border-[var(--border)]">
-          <div className="bg-[var(--card)]" />
-          {days.map((iso) => (
-            <div
-              key={iso}
-              className={cn(
-                "bg-[var(--card)] py-1 text-center text-xs font-semibold",
-                iso === today
-                  ? "text-[var(--color-check)]"
-                  : "text-[var(--muted)]",
-              )}
-            >
-              {format(parseISO(iso), "EEE d")}
+    <div>
+      <div
+        ref={scroller}
+        className="max-h-[70vh] overflow-auto rounded-xl border border-[var(--border)]"
+      >
+        <div className="min-w-[44rem]">
+          {/* Weekday headers + all-day row, pinned to the top while the
+              hours scroll. Same grid tracks as the hour grid below. */}
+          <div className="sticky top-0 z-10 border-b border-[var(--border)] bg-[var(--card)]">
+            <div className="grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)]">
+              <div className="bg-[var(--card)]" />
+              {days.map((iso) => (
+                <div
+                  key={iso}
+                  className={cn(
+                    "bg-[var(--card)] py-1 text-center text-xs font-semibold",
+                    iso === today
+                      ? "text-[var(--color-check)]"
+                      : "text-[var(--muted)]",
+                  )}
+                >
+                  {format(parseISO(iso), "EEE d")}
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
 
-        {/* All-day row */}
-        <div className="my-px grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)] border border-[var(--border)]">
-          <div className="bg-[var(--card)] p-1 text-center text-[0.6rem] uppercase text-[var(--muted)]">
-            all day
-          </div>
-          {days.map((iso) => {
-            const allday = (feeds.get(iso) ?? []).filter((f) => f.allDay);
-            return (
-              <div
-                key={iso}
-                className={cn(
-                  "flex min-h-10 flex-col gap-0.5 bg-[var(--card)] p-1",
-                  iso === today && "bg-[var(--color-check-soft)]",
-                )}
-              >
-                {allday.slice(0, 2).map((f) => (
-                  <span
-                    key={f.id}
-                    className={cn(
-                      "truncate rounded px-1 text-[0.68rem] leading-4",
-                      f.kind === "event"
-                        ? "bg-[var(--color-check-soft)] text-[var(--color-check)]"
-                        : "text-[var(--muted)]",
-                    )}
-                    title={f.title}
-                  >
-                    {f.title}
-                  </span>
-                ))}
-                {allday.length > 2 && (
-                  <span className="text-[0.68rem] leading-4 text-[var(--muted)]">
-                    +{allday.length - 2}
-                  </span>
-                )}
+            <div className="grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)] border-t border-[var(--border)]">
+              <div className="bg-[var(--card)] p-1 text-center text-[0.6rem] uppercase text-[var(--muted)]">
+                all day
               </div>
-            );
-          })}
-        </div>
+              {days.map((iso) => {
+                const allday = (feeds.get(iso) ?? []).filter((f) => f.allDay);
+                return (
+                  <div
+                    key={iso}
+                    className={cn(
+                      "flex min-h-10 flex-col gap-0.5 bg-[var(--card)] p-1",
+                      iso === today && "bg-[var(--color-check-soft)]",
+                    )}
+                  >
+                    {allday.slice(0, 2).map((f) => (
+                      <span
+                        key={f.id}
+                        className={cn(
+                          "truncate rounded px-1 text-[0.68rem] leading-4",
+                          f.kind === "event"
+                            ? "bg-[var(--color-check-soft)] text-[var(--color-check)]"
+                            : "text-[var(--muted)]",
+                        )}
+                        title={f.title}
+                      >
+                        {f.title}
+                      </span>
+                    ))}
+                    {allday.length > 2 && (
+                      <span className="text-[0.68rem] leading-4 text-[var(--muted)]">
+                        +{allday.length - 2}
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
 
-        {/* Hour grid */}
-        <div ref={scroller} className="max-h-[70vh] overflow-y-auto rounded-b-xl border border-t-0 border-[var(--border)]">
-          <div className="grid grid-cols-[3rem_repeat(7,1fr)]">
+          {/* Hour grid */}
+          <div className="grid grid-cols-[3rem_repeat(7,1fr)] divide-x divide-[var(--border)]">
             {/* hour labels */}
             <div>
               {Array.from({ length: 24 }, (_, h) => (
@@ -128,7 +139,7 @@ export function WeekView({
                 <div
                   key={iso}
                   className={cn(
-                    "relative border-l border-[var(--border)]",
+                    "relative",
                     iso === today && "bg-[var(--color-check-soft)]/30",
                   )}
                   style={{ height: 24 * HOUR_H }}
@@ -187,10 +198,10 @@ export function WeekView({
             })}
           </div>
         </div>
-        <p className="mt-2 text-xs text-[var(--muted)]">
-          Tap an empty slot to add an event at that time.
-        </p>
       </div>
+      <p className="mt-2 text-xs text-[var(--muted)]">
+        Tap an empty slot to add an event at that time.
+      </p>
     </div>
   );
 }
