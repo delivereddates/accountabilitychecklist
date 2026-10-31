@@ -70,6 +70,11 @@ export interface NoteRecord extends BaseRecord {
   content: unknown;
   /** Optional date; dated notes appear in the unified feed. */
   date: string | null;
+  /** Manual position within its folder section (1 = first). 0 = never
+   *  placed — the row then orders by last-modified (newest first). Dragging
+   *  a grip renumbers the whole section; moving the note to another folder
+   *  resets it to 0. Section-scoped, like TodoRecord.sortOrder. */
+  sortOrder: number;
 }
 
 export type TableName = "todos" | "events" | "notes" | "folders";

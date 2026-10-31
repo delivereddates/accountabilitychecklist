@@ -1,11 +1,10 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { CloudOff } from "lucide-react";
+import { CloudOff, Plus } from "lucide-react";
 import { cn, toISODate } from "@/lib/utils";
 import { useLocalUserId, useStorageAvailable, useTodos } from "@/lib/local/hooks";
 import type { TodoRecord } from "@/lib/local/types";
-import { TodoForm } from "./TodoForm";
 import { TodoList } from "./TodoList";
 import { TodoTree } from "./TodoTree";
 import { TodoEditDialog } from "./TodoEditDialog";
@@ -17,7 +16,7 @@ const VIEWS: { key: View; label: string }[] = [
   { key: "dated", label: "Dated" },
   { key: "blocked", label: "Blocked" },
   { key: "low", label: "Low" },
-  { key: "tree", label: "Tree" },
+  { key: "tree", label: "All" },
 ];
 
 // The chosen view sticks across tab switches (per device, like the draft).
@@ -34,6 +33,8 @@ export function TodosClient() {
   const todos = useTodos(userId);
   const storageOk = useStorageAvailable();
   const [view, setView] = useState<View>(readView);
+  // True while the header "+ Add" sheet (create mode) is open.
+  const [adding, setAdding] = useState(false);
   // The todo whose edit sheet is open (null = closed). Held here, above the
   // lists, so the sheet stays open even when an edit moves the todo out of
   // the view it was opened from.
@@ -69,6 +70,13 @@ export function TodosClient() {
           <span className="text-sm text-[var(--muted)]">{openCount} open</span>
         )}
         <div className="ml-auto flex items-center gap-2">
+          <button
+            onClick={() => setAdding(true)}
+            className="inline-flex h-8 shrink-0 items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-xs font-semibold text-white"
+          >
+            <Plus className="h-3.5 w-3.5" />
+            Add
+          </button>
           <div className="flex rounded-lg border border-[var(--border)] p-0.5 text-xs">
             {VIEWS.map((v) => (
               <button
@@ -96,8 +104,6 @@ export function TodosClient() {
         </p>
       )}
 
-      <TodoForm userId={userId} />
-
       {todos === undefined ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
       ) : view === "tree" ? (
@@ -113,10 +119,19 @@ export function TodosClient() {
         />
       )}
 
+      {adding && (
+        <TodoEditDialog
+          userId={userId}
+          todos={sorted}
+          onClose={() => setAdding(false)}
+        />
+      )}
+
       {editingId && (() => {
         const editing = sorted.find((t) => t.id === editingId);
         return editing ? (
           <TodoEditDialog
+            userId={userId}
             todo={editing}
             todos={sorted}
             onClose={() => setEditingId(null)}

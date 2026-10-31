@@ -3,7 +3,12 @@
 import { useEffect, useRef, useState } from "react";
 import { Trash2, X } from "lucide-react";
 import { cn } from "@/lib/utils";
-import { CycleError, deleteTodo, updateTodo } from "@/lib/local/mutations";
+import {
+  CycleError,
+  createTodo,
+  deleteTodo,
+  updateTodo,
+} from "@/lib/local/mutations";
 import type { TodoRecord } from "@/lib/local/types";
 import { BlockerPicker, type BlockerSelection } from "./BlockerPicker";
 
@@ -13,25 +18,45 @@ const PRIORITIES = [
   { value: "low", label: "Low" },
 ] as const;
 
+/** Fields of a not-yet-existing todo (create mode holds everything locally —
+ *  there's no row to write through to until close()). */
+interface Draft {
+  date: string;
+  priority: "high" | "low" | null;
+  blockerId: string | null;
+  blockerText: string | null;
+}
+
 /**
- * The full editor for one todo, opened by tapping its row. Discrete fields
- * (date, priority, blocker) write through the instant they change — house
- * style, no Save button; the text is a draft committed on close (Done, ✕,
- * Escape, or the overlay), like the inline edit it replaces. It lives in
- * TodosClient (which holds the id) so it stays open even when a change moves
- * the todo out of the view it was opened from — set a far date from Current
- * and the sheet keeps the todo in hand.
+ * The full editor for one todo, opened by tapping its row (edit mode) or the
+ * header's "+ Add" (create mode). In edit mode the discrete fields (date,
+ * priority, blocker) write through the instant they change — house style, no
+ * Save button; the text is a draft committed on close (Done, ✕, Escape, or
+ * the overlay), like the inline edit it replaces. It lives in TodosClient
+ * (which holds the state) so it stays open even when a change moves the todo
+ * out of the view it was opened from — set a far date from Current and the
+ * sheet keeps the todo in hand.
  */
 export function TodoEditDialog({
+  userId,
   todo,
   todos,
   onClose,
 }: {
-  todo: TodoRecord;
+  userId: string;
+  /** Omitted = create mode: every field edits the draft, and close() creates
+   *  the todo in one shot. */
+  todo?: TodoRecord;
   todos: TodoRecord[];
   onClose: () => void;
 }) {
-  const [text, setText] = useState(todo.text);
+  const [text, setText] = useState(todo?.text ?? "");
+  const [draft, setDraft] = useState<Draft>({
+    date: "",
+    priority: null,
+    blockerId: null,
+    blockerText: null,
+  });
   const [error, setError] = useState<string | null>(null);
   const textRef = useRef<HTMLTextAreaElement>(null);
 
@@ -75,20 +100,56 @@ export function TodoEditDialog({
     return () => window.removeEventListener("keydown", onKey);
   });
 
-  function close() {
-    const trimmed = text.trim(); // outer only — inner newlines are content
-    if (trimmed && trimmed !== todo.text) void updateTodo(todo.id, { text: trimmed });
-    onClose();
+  const date = todo ? todo.date : draft.date || null;
+  const priority = todo ? (todo.priority ?? null) : draft.priority;
+  const blocker: BlockerSelection = todo
+    ? { blockerId: todo.blockerId, blockerText: todo.blockerText ?? null }
+    : { blockerId: draft.blockerId, blockerText: draft.blockerText };
+
+  function setDate(next: string) {
+    if (todo) void updateTodo(todo.id, { date: next || null });
+    else setDraft((d) => ({ ...d, date: next }));
+  }
+
+  function setPriority(next: "high" | "low" | null) {
+    if (todo) void updateTodo(todo.id, { priority: next });
+    else setDraft((d) => ({ ...d, priority: next }));
   }
 
   function changeBlocker(next: BlockerSelection) {
-    setError(null);
-    updateTodo(todo.id, next).catch((e) => {
-      if (e instanceof CycleError) setError(e.message);
-    });
+    if (todo) {
+      setError(null);
+      updateTodo(todo.id, next).catch((e) => {
+        if (e instanceof CycleError) setError(e.message);
+      });
+    } else {
+      // A brand-new todo has no children, so no blocker choice can loop.
+      setDraft((d) => ({
+        ...d,
+        blockerId: next.blockerId,
+        blockerText: next.blockerText,
+      }));
+    }
+  }
+
+  function close() {
+    const trimmed = text.trim(); // outer only — inner newlines are content
+    if (todo) {
+      if (trimmed && trimmed !== todo.text) void updateTodo(todo.id, { text: trimmed });
+    } else if (trimmed) {
+      void createTodo(userId, {
+        text: trimmed,
+        date: draft.date || null,
+        priority: draft.priority,
+        blockerId: draft.blockerId,
+        blockerText: draft.blockerText,
+      });
+    }
+    onClose();
   }
 
   function remove() {
+    if (!todo) return;
     if (window.confirm("Delete this todo? Anything waiting on it will unblock.")) {
       onClose();
       void deleteTodo(todo.id);
@@ -100,7 +161,7 @@ export function TodoEditDialog({
       className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 sm:items-center sm:p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Edit todo"
+      aria-label={todo ? "Edit todo" : "New todo"}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) close();
       }}
@@ -108,7 +169,7 @@ export function TodoEditDialog({
       <div className="max-h-[90dvh] w-full max-w-lg overflow-y-auto overscroll-contain rounded-t-2xl border border-[var(--border)] bg-[var(--card)] p-4 shadow-xl sm:rounded-2xl">
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">
-            Edit todo
+            {todo ? "Edit todo" : "New todo"}
           </h2>
           <button
             onClick={close}
@@ -145,16 +206,14 @@ export function TodoEditDialog({
             <div className="flex items-center gap-0.5">
               <input
                 type="date"
-                value={todo.date ?? ""}
-                onChange={(e) =>
-                  void updateTodo(todo.id, { date: e.target.value || null })
-                }
+                value={date ?? ""}
+                onChange={(e) => setDate(e.target.value)}
                 title="Date (optional)"
                 className="h-8 rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm text-[var(--muted)]"
               />
-              {todo.date && (
+              {date && (
                 <button
-                  onClick={() => void updateTodo(todo.id, { date: null })}
+                  onClick={() => setDate("")}
                   aria-label="Clear date"
                   title="Clear date"
                   className="flex h-8 w-7 items-center justify-center text-[var(--muted)] hover:text-[var(--color-nocheck)]"
@@ -175,13 +234,13 @@ export function TodoEditDialog({
               aria-label="Priority"
             >
               {PRIORITIES.map((p) => {
-                const active = (todo.priority ?? null) === p.value;
+                const active = priority === p.value;
                 return (
                   <button
                     key={p.label}
                     role="radio"
                     aria-checked={active}
-                    onClick={() => void updateTodo(todo.id, { priority: p.value })}
+                    onClick={() => setPriority(p.value)}
                     className={cn(
                       "rounded-md px-2.5 py-1 transition-colors",
                       active
@@ -204,11 +263,8 @@ export function TodoEditDialog({
             </span>
             <BlockerPicker
               todos={todos}
-              selfId={todo.id}
-              value={{
-                blockerId: todo.blockerId,
-                blockerText: todo.blockerText ?? null,
-              }}
+              selfId={todo?.id}
+              value={blocker}
               onChange={changeBlocker}
               className="h-8 w-56 max-w-full rounded-lg border border-[var(--border)] bg-[var(--card)] px-2 text-sm text-[var(--muted)] outline-none focus:border-[var(--color-check)]"
             />
@@ -221,18 +277,23 @@ export function TodoEditDialog({
         </div>
 
         <div className="mt-4 flex items-center justify-between">
-          <button
-            onClick={remove}
-            className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-[var(--muted)] hover:bg-black/5 hover:text-[var(--color-nocheck)]"
-          >
-            <Trash2 className="h-4 w-4" />
-            Delete
-          </button>
+          {todo ? (
+            <button
+              onClick={remove}
+              className="inline-flex items-center gap-1 rounded-lg px-2.5 py-1.5 text-sm text-[var(--muted)] hover:bg-black/5 hover:text-[var(--color-nocheck)]"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete
+            </button>
+          ) : (
+            <span /> // keeps the primary button right-aligned
+          )}
           <button
             onClick={close}
-            className="h-9 rounded-lg bg-[var(--color-check)] px-4 text-sm font-semibold text-white transition-opacity"
+            disabled={!todo && !text.trim()}
+            className="h-9 rounded-lg bg-[var(--color-check)] px-4 text-sm font-semibold text-white transition-opacity disabled:opacity-40"
           >
-            Done
+            {todo ? "Done" : "Add"}
           </button>
         </div>
       </div>

@@ -24,7 +24,7 @@ export function TodoTree({
   if (todos.length === 0) {
     return (
       <p className="text-sm text-[var(--muted)]">
-        Nothing here yet — add your first todo above.
+        Nothing here yet — tap + Add to create your first todo.
       </p>
     );
   }

@@ -555,6 +555,7 @@ export async function pullLocalRecords(
       title: row.title,
       content: row.content,
       date: row.date,
+      sortOrder: row.sort_order,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
       deleted: row.deleted,
@@ -810,7 +811,7 @@ interface EventRow {
 }
 interface NoteRow {
   id: string; user_id: string; folder_id: string | null; title: string;
-  content: unknown; date: string | null;
+  content: unknown; date: string | null; sort_order: number;
   created_at: number; updated_at: number; deleted: boolean;
 }
 interface FolderRow {

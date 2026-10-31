@@ -94,6 +94,8 @@ create index if not exists folders_user_parent_idx on public.folders(user_id, pa
 
 -- ---------------------------------------------------------------------------
 -- notes: rich-text notes (content = Tiptap JSON document, stored as jsonb).
+-- sort_order is the manual position within a folder section (0 = by recency),
+-- section-scoped like todos.sort_order.
 -- ---------------------------------------------------------------------------
 create table if not exists public.notes (
   id         uuid primary key,
@@ -102,11 +104,14 @@ create table if not exists public.notes (
   title      text not null default '',
   content    jsonb not null default '{}'::jsonb,
   date       date,
+  sort_order double precision not null default 0,
   created_at bigint not null,
   updated_at bigint not null,
   deleted    boolean not null default false,
   synced_at  timestamptz not null default now()
 );
+-- The alter covers databases created before sort_order existed.
+alter table public.notes add column if not exists sort_order double precision not null default 0;
 create index if not exists notes_user_synced_idx on public.notes(user_id, synced_at);
 
 -- ===========================================================================
@@ -206,16 +211,18 @@ begin
   end loop;
 
   for r in select * from jsonb_array_elements(p_notes) loop
-    insert into public.notes (id, user_id, folder_id, title, content, date,
+    insert into public.notes (id, user_id, folder_id, title, content, date, sort_order,
                               created_at, updated_at, deleted)
     values ((r->>'id')::uuid, p_user_id, nullif(r->>'folderId','')::uuid,
             coalesce(r->>'title',''), coalesce(r->'content', '{}'::jsonb),
             nullif(r->>'date','')::date,
+            coalesce((r->>'sortOrder')::double precision, 0),
             (r->>'createdAt')::bigint, (r->>'updatedAt')::bigint,
             coalesce((r->>'deleted')::boolean, false))
     on conflict (id) do update
       set folder_id = excluded.folder_id, title = excluded.title,
           content = excluded.content, date = excluded.date,
+          sort_order = excluded.sort_order,
           updated_at = excluded.updated_at, deleted = excluded.deleted,
           synced_at = now()
       where excluded.updated_at > notes.updated_at;

@@ -6,17 +6,36 @@ import {
   FileText,
   Folder,
   FolderPlus,
+  GripVertical,
   Inbox,
   Pencil,
   Plus,
   Trash2,
 } from "lucide-react";
+import {
+  DndContext,
+  KeyboardSensor,
+  PointerSensor,
+  closestCenter,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  SortableContext,
+  arrayMove,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { cn } from "@/lib/utils";
 import {
   createFolder,
   createNote,
   deleteFolder,
   renameFolder,
+  updateNote,
 } from "@/lib/local/mutations";
 import type { NoteRecord } from "@/lib/local/types";
 import type { FolderTree, FolderTreeNode } from "./folderTree";
@@ -29,6 +48,11 @@ import type { FolderTree, FolderTreeNode } from "./folderTree";
  * note" button files the note — and opens it if it was collapsed. Row counts
  * roll up the whole subtree. Deleting a folder keeps its notes (they become
  * unfiled) and moves its subfolders up one level.
+ *
+ * Every section (Unfiled, each folder) is drag-reorderable: never-dragged
+ * rows order by last modified (newest first), and one drag renumbers the
+ * whole section 1..n, pinning it in the arranged order — the same semantics
+ * as the todo lists.
  */
 export function FolderSidebar({
   userId,
@@ -54,15 +78,15 @@ export function FolderSidebar({
   const [renamingId, setRenamingId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
 
-  // Direct notes per folder (what expansion reveals).
+  // Direct notes per folder, ordered (what expansion reveals / drags reorder).
   const byFolder = new Map<string, NoteRecord[]>();
   for (const n of notes) {
-    if (n.folderId) {
-      const list = byFolder.get(n.folderId);
-      if (list) list.push(n);
-      else byFolder.set(n.folderId, [n]);
-    }
+    if (!n.folderId) continue;
+    const list = byFolder.get(n.folderId);
+    if (list) list.push(n);
+    else byFolder.set(n.folderId, [n]);
   }
+  for (const [id, list] of byFolder) byFolder.set(id, orderNotes(list));
   const totals = new Map<string, number>();
   const rollUp = (node: FolderTreeNode): number => {
     let count = (byFolder.get(node.folder.id) ?? []).length;
@@ -71,10 +95,33 @@ export function FolderSidebar({
     return count;
   };
   tree.roots.forEach(rollUp);
-  const unfiledNotes = notes
-    .filter((n) => !n.folderId)
-    .sort((a, b) => b.updatedAt - a.updatedAt);
+  const unfiledNotes = orderNotes(notes.filter((n) => !n.folderId));
   const unfiledOpen = !collapsed.has("unfiled");
+
+  const sensors = useSensors(
+    // A little travel before the drag engages, so a sloppy grip-tap doesn't
+    // swallow the tap. Dragging is grip-only; the row itself stays tappable.
+    useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  function handleDragEnd({ active, over }: DragEndEvent) {
+    if (!over || active.id === over.id) return;
+    const groups = [unfiledNotes, ...byFolder.values()];
+    for (const items of groups) {
+      const from = items.findIndex((n) => n.id === active.id);
+      if (from === -1) continue;
+      const to = items.findIndex((n) => n.id === over.id);
+      if (to === -1) continue; // dropped over another section — not a reorder
+      // Renumber the whole section 1..n: any drag makes it fully manual, so
+      // what you arranged is exactly what you see. Rows whose number didn't
+      // change skip the write (and the sync round-trip).
+      arrayMove(items, from, to).forEach((n, i) => {
+        if (n.sortOrder !== i + 1) void updateNote(n.id, { sortOrder: i + 1 });
+      });
+      return;
+    }
+  }
 
   // New note goes into the selected folder (or Unfiled), which expands so
   // the note is visible in the tree when the editor closes.
@@ -107,21 +154,13 @@ export function FolderSidebar({
 
   function renderNote(note: NoteRecord, depth: number): React.ReactNode {
     return (
-      <button
+      <SortableNote
         key={note.id}
-        onClick={() => onOpenNote(note.id)}
-        title={note.title || "(untitled)"}
-        className={cn(
-          "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg py-1 pl-2 pr-2 text-left text-[13px] transition-colors",
-          selectedNoteId === note.id
-            ? "bg-[var(--color-check-soft)] font-medium text-[var(--color-check)]"
-            : "text-[var(--muted)] hover:bg-black/5",
-        )}
-        style={{ paddingLeft: depth * 14 + 18 }}
-      >
-        <FileText className="h-3 w-3 shrink-0 opacity-70" />
-        <span className="min-w-0 truncate">{note.title || "(untitled)"}</span>
-      </button>
+        note={note}
+        depth={depth}
+        selectedNoteId={selectedNoteId}
+        onOpenNote={onOpenNote}
+      />
     );
   }
 
@@ -250,10 +289,12 @@ export function FolderSidebar({
         {expandable && !isCollapsed && (
           <div>
             {node.children.map(renderNode)}
-            {directNotes
-              .slice()
-              .sort((a, b) => b.updatedAt - a.updatedAt)
-              .map((n) => renderNote(n, depth + 1))}
+            <SortableContext
+              items={directNotes.map((n) => n.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {directNotes.map((n) => renderNote(n, depth + 1))}
+            </SortableContext>
           </div>
         )}
       </div>
@@ -264,74 +305,164 @@ export function FolderSidebar({
     <aside className="flex w-full flex-col gap-0.5 md:w-64">
       <button
         onClick={() => void addNote()}
-        className="mb-2 inline-flex h-9 shrink-0 items-center justify-center gap-1 rounded-lg bg-[var(--color-check)] text-sm font-semibold text-white"
+        className="mb-2 inline-flex h-8 shrink-0 self-start items-center gap-1 rounded-lg bg-[var(--color-check)] px-2.5 text-xs font-semibold text-white"
       >
-        <Plus className="h-4 w-4" />
+        <Plus className="h-3.5 w-3.5" />
         New note
       </button>
 
-      <div>
-        <div className="flex items-center gap-0.5">
-          <button
-            onClick={() => unfiledNotes.length > 0 && toggle("unfiled")}
-            title={unfiledOpen ? "Collapse" : "Expand"}
-            className={cn(
-              "flex h-5 w-4 shrink-0 items-center justify-center text-[var(--muted)]",
-              unfiledNotes.length === 0 && "invisible",
-            )}
-          >
-            <ChevronRight
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleDragEnd}
+      >
+        <div>
+          <div className="flex items-center gap-0.5">
+            <button
+              onClick={() => unfiledNotes.length > 0 && toggle("unfiled")}
+              title={unfiledOpen ? "Collapse" : "Expand"}
               className={cn(
-                "h-3 w-3 transition-transform",
-                unfiledNotes.length > 0 && unfiledOpen && "rotate-90",
+                "flex h-5 w-4 shrink-0 items-center justify-center text-[var(--muted)]",
+                unfiledNotes.length === 0 && "invisible",
               )}
-            />
-          </button>
+            >
+              <ChevronRight
+                className={cn(
+                  "h-3 w-3 transition-transform",
+                  unfiledNotes.length > 0 && unfiledOpen && "rotate-90",
+                )}
+              />
+            </button>
+            <button
+              onClick={() => {
+                onSelect("unfiled");
+                if (!unfiledOpen && unfiledNotes.length > 0) toggle("unfiled");
+              }}
+              className={cn(
+                "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
+                selected === "unfiled"
+                  ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
+                  : "text-[var(--muted)] hover:bg-black/5",
+              )}
+            >
+              <Inbox className="h-3.5 w-3.5 shrink-0" />
+              <span className="min-w-0 truncate">Unfiled</span>
+              <span className="ml-auto text-xs tabular-nums">
+                {unfiledNotes.length}
+              </span>
+            </button>
+          </div>
+          {unfiledOpen && (
+            <SortableContext
+              items={unfiledNotes.map((n) => n.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {unfiledNotes.map((n) => renderNote(n, 0))}
+            </SortableContext>
+          )}
+        </div>
+
+        {tree.roots.map(renderNode)}
+
+        {addingAt === "root" ? (
+          <NewFolderInput
+            value={newName}
+            onChange={setNewName}
+            onCommit={() => commitAdd(null)}
+            onCancel={() => setAddingAt(null)}
+            indent={0}
+          />
+        ) : (
           <button
             onClick={() => {
-              onSelect("unfiled");
-              if (!unfiledOpen && unfiledNotes.length > 0) toggle("unfiled");
+              setAddingAt("root");
+              setNewName("");
             }}
-            className={cn(
-              "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg px-2 py-1.5 text-left text-sm transition-colors",
-              selected === "unfiled"
-                ? "bg-[var(--color-check-soft)] font-semibold text-[var(--color-check)]"
-                : "text-[var(--muted)] hover:bg-black/5",
-            )}
+            className="mt-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] hover:bg-black/5"
           >
-            <Inbox className="h-3.5 w-3.5 shrink-0" />
-            <span className="min-w-0 truncate">Unfiled</span>
-            <span className="ml-auto text-xs tabular-nums">
-              {unfiledNotes.length}
-            </span>
+            <FolderPlus className="h-3.5 w-3.5" />
+            New folder
           </button>
-        </div>
-        {unfiledOpen && unfiledNotes.map((n) => renderNote(n, 0))}
-      </div>
-
-      {tree.roots.map(renderNode)}
-
-      {addingAt === "root" ? (
-        <NewFolderInput
-          value={newName}
-          onChange={setNewName}
-          onCommit={() => commitAdd(null)}
-          onCancel={() => setAddingAt(null)}
-          indent={0}
-        />
-      ) : (
-        <button
-          onClick={() => {
-            setAddingAt("root");
-            setNewName("");
-          }}
-          className="mt-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-sm text-[var(--muted)] hover:bg-black/5"
-        >
-          <FolderPlus className="h-3.5 w-3.5" />
-          New folder
-        </button>
-      )}
+        )}
+      </DndContext>
     </aside>
+  );
+}
+
+/** Same section ordering as the todo lists: rows never manually placed
+ *  (sortOrder 0) by last modified (newest first), then manually placed rows
+ *  in their pinned order. A drag renumbers the whole section, so a section
+ *  is either recency-ordered or fully manual. */
+function orderNotes(notes: NoteRecord[]): NoteRecord[] {
+  return [...notes].sort((a, b) => {
+    const pinnedA = a.sortOrder > 0;
+    const pinnedB = b.sortOrder > 0;
+    if (pinnedA !== pinnedB) return pinnedA ? 1 : -1;
+    if (pinnedA && a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return b.updatedAt - a.updatedAt;
+  });
+}
+
+/** A note row with its drag grip, wired into the enclosing SortableContext. */
+function SortableNote({
+  note,
+  depth,
+  selectedNoteId,
+  onOpenNote,
+}: {
+  note: NoteRecord;
+  depth: number;
+  selectedNoteId: string | null;
+  onOpenNote: (id: string) => void;
+}) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: note.id });
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition }}
+      className={cn(
+        "flex items-center gap-0.5",
+        isDragging && "relative z-20 bg-[var(--card)] shadow-md",
+      )}
+    >
+      <button
+        type="button"
+        ref={setActivatorNodeRef}
+        {...attributes}
+        {...listeners}
+        aria-label="Reorder note"
+        title="Drag to reorder"
+        style={{ marginLeft: depth * 14 }}
+        // touch-none only on the grip — the drag must own the gesture or the
+        // page scrolls out from under it. Everywhere else scrolls normally.
+        className="flex h-5 w-4 shrink-0 cursor-grab touch-none items-center justify-center text-[var(--border)] hover:text-[var(--muted)] active:cursor-grabbing"
+      >
+        <GripVertical className="h-3 w-3" />
+      </button>
+      <button
+        onClick={() => onOpenNote(note.id)}
+        title={note.title || "(untitled)"}
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-1.5 rounded-lg py-1 pr-2 text-left text-[13px] transition-colors",
+          selectedNoteId === note.id
+            ? "bg-[var(--color-check-soft)] font-medium text-[var(--color-check)]"
+            : "text-[var(--muted)] hover:bg-black/5",
+        )}
+        style={{ paddingLeft: depth * 14 }}
+      >
+        <FileText className="h-3 w-3 shrink-0 opacity-70" />
+        <span className="min-w-0 truncate">{note.title || "(untitled)"}</span>
+      </button>
+    </div>
   );
 }
 

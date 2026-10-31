@@ -338,7 +338,8 @@ export async function deleteFolder(id: string): Promise<void> {
       .filter((n) => n.folderId === id && !n.deleted)
       .toArray();
     for (const n of notes) {
-      await db.notes.put({ ...n, folderId: null, updatedAt: now });
+      // Unfiled is a new section — drop any manual position from the folder.
+      await db.notes.put({ ...n, folderId: null, sortOrder: 0, updatedAt: now });
       await queue(db, "notes", n.id);
     }
   });
@@ -363,6 +364,7 @@ export async function createNote(
     title: "",
     content: EMPTY_DOC,
     date: null,
+    sortOrder: 0,
     createdAt: now,
     updatedAt: now,
     deleted: false,
@@ -376,7 +378,7 @@ export async function createNote(
 }
 
 export type NotePatch = Partial<
-  Pick<NoteRecord, "title" | "content" | "folderId" | "date">
+  Pick<NoteRecord, "title" | "content" | "folderId" | "date" | "sortOrder">
 >;
 
 export async function updateNote(id: string, patch: NotePatch): Promise<void> {
@@ -384,7 +386,16 @@ export async function updateNote(id: string, patch: NotePatch): Promise<void> {
   await db.transaction("rw", db.notes, db.outbox, async () => {
     const cur = await db.notes.get(id);
     if (!cur || cur.deleted) return;
-    await db.notes.put({ ...cur, ...patch, updatedAt: nowMs() });
+    // A folder move changes which section the note belongs to, so any manual
+    // position no longer applies — drop it (title/content/date edits and
+    // drags within the folder keep it).
+    const movesSections = patch.folderId !== undefined;
+    await db.notes.put({
+      ...cur,
+      ...patch,
+      ...(movesSections && patch.sortOrder === undefined ? { sortOrder: 0 } : {}),
+      updatedAt: nowMs(),
+    });
     await queue(db, "notes", id);
   });
   schedulePush();
@@ -404,7 +415,9 @@ export async function deleteNote(id: string): Promise<void> {
 
 /**
  * Copy a note with a fresh id — same folder, date, and content, title gains
- * a " (copy)" suffix (re-duplicating a copy doesn't stack suffixes).
+ * a " (copy)" suffix (re-duplicating a copy doesn't stack suffixes). The copy
+ * is never placed (sortOrder 0): it surfaces at the top of its section by
+ * recency instead of fighting the original for its manual slot.
  */
 export async function duplicateNote(id: string): Promise<string | null> {
   const db = getDb();
@@ -416,6 +429,7 @@ export async function duplicateNote(id: string): Promise<string | null> {
     ...src,
     id: copyId,
     title: src.title ? `${src.title.replace(/ \(copy\)$/, "")} (copy)` : "",
+    sortOrder: 0,
     createdAt: now,
     updatedAt: now,
     deleted: false,

@@ -178,7 +178,7 @@ export function TodoList({
         ))}
         {todos.length === 0 && (
           <p className="text-sm text-[var(--muted)]">
-            Nothing here yet — add your first todo above.
+            Nothing here yet — tap + Add to create your first todo.
           </p>
         )}
         {todos.length > 0 && open.length === 0 && (
