@@ -48,7 +48,7 @@ export async function sendToUser(
       try {
         await webpush.sendNotification(
           { endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } },
-          JSON.stringify({ ...payload, tag: "accountability", url: "/daily" }),
+          JSON.stringify({ ...payload, tag: "olives", url: "/daily" }),
           // Stale pushes expire instead of buzzing hours later when a phone
           // reconnects.
           { TTL: 1800 },

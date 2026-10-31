@@ -28,14 +28,14 @@ export const viewport: Viewport = {
 };
 
 export const metadata: Metadata = {
-  title: "Accountability Checklist",
-  description: "Shared daily accountability tracker for the whole team.",
+  title: "Olives",
+  description: "Your todos, calendar, and notes.",
   // apple-icons adds <link rel="apple-touch-icon" sizes="180x180"> (from
   // app/apple-icon.tsx); the web-app metas make it install full-screen when
   // added to the iOS home screen instead of opening in a Safari tab.
   appleWebApp: {
     capable: true,
-    title: "Accountability",
+    title: "Olives",
     statusBarStyle: "default",
   },
 };

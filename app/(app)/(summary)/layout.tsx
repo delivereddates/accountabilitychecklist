@@ -1,7 +1,7 @@
 import { SummarySidebar } from "@/components/summary/SummarySidebar";
 
 /**
- * Shared shell for the accountability pages (Daily/Week/Month/Year): the
+ * Shared shell for the daily-tracker pages (Daily/Week/Month/Year): the
  * period-view rail sits beside the content on md+ and above it on phones.
  * Route group keeps the URLs unchanged (`/`, `/week`, `/month`, `/year`).
  */

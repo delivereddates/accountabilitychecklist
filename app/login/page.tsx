@@ -44,9 +44,7 @@ export default function LoginPage() {
           <div className="mb-3 flex h-12 w-12 items-center justify-center rounded-xl bg-[var(--color-check-soft)]">
             <ListChecks className="h-6 w-6 text-[var(--color-check)]" />
           </div>
-          <h1 className="text-xl font-semibold tracking-tight">
-            Accountability Checklist
-          </h1>
+          <h1 className="text-xl font-semibold tracking-tight">Olives</h1>
           <p className="mt-1 text-sm text-[var(--muted)]">
             Sign in with your account.
           </p>

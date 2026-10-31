@@ -105,7 +105,20 @@ export async function updateTodo(id: string, patch: TodoPatch): Promise<void> {
       );
       if (wouldCreateCycle(byId, id, patch.blockerId)) throw new CycleError();
     }
-    await db.todos.put({ ...cur, ...patch, updatedAt: nowMs() });
+    // A date/priority/blocker change moves the row to a different section,
+    // so any manual position (sortOrder) no longer applies — drop it and let
+    // the row join its new section by recency. Pure text edits keep position.
+    const movesSections =
+      patch.date !== undefined ||
+      patch.priority !== undefined ||
+      patch.blockerId !== undefined ||
+      patch.blockerText !== undefined;
+    await db.todos.put({
+      ...cur,
+      ...patch,
+      ...(movesSections && patch.sortOrder === undefined ? { sortOrder: 0 } : {}),
+      updatedAt: nowMs(),
+    });
     await queue(db, "todos", id);
   });
   schedulePush();
@@ -122,6 +135,9 @@ export async function toggleTodo(id: string): Promise<void> {
       ...cur,
       completed,
       completedAt: completed ? now : null,
+      // Completing/uncompleting moves the row between the open and done
+      // sections — a manual position doesn't carry over.
+      sortOrder: 0,
       updatedAt: now,
     });
     await queue(db, "todos", id);

@@ -1,9 +1,9 @@
-# Accountability Checklist
+# Olives
 
-A multi-user **daily accountability tracker**. Each person signs in with their
-own username/password (accounts are admin-managed via an environment
-variable); inside, everyone tracks daily task completion, with daily / weekly /
-monthly / yearly summaries and optional 11:00 / 17:00 / 21:00 push reminders.
+A multi-user **personal productivity app** — todos, calendar, notes, and a
+daily tracker with weekly / monthly / yearly summaries. Each person signs in
+with their own username/password (accounts are admin-managed via an
+environment variable), and optional 11:00 / 17:00 / 21:00 push reminders.
 
 Built with **Next.js (App Router) · TypeScript · Tailwind CSS · iron-session ·
 Supabase · date-fns · Web Push**.

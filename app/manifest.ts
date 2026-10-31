@@ -2,9 +2,9 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Accountability Checklist",
-    short_name: "Accountability",
-    description: "Shared daily accountability tracker.",
+    name: "Olives",
+    short_name: "Olives",
+    description: "Your todos, calendar, and notes.",
     start_url: "/calendar",
     display: "standalone",
     background_color: "#f6f7f9",

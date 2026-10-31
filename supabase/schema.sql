@@ -1,5 +1,5 @@
 -- ===========================================================================
--- Accountability Checklist — Supabase schema
+-- Olives — Supabase schema
 -- Run this in the Supabase SQL editor (Dashboard > SQL > New query).
 -- It is idempotent: safe to re-run.
 -- ===========================================================================

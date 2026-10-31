@@ -15,9 +15,9 @@ self.addEventListener("push", (event) => {
     data = {};
   }
   event.waitUntil(
-    self.registration.showNotification(data.title || "Accountability", {
+    self.registration.showNotification(data.title || "Olives", {
       body: data.body || "Time to check in on your tasks.",
-      tag: data.tag || "accountability", // 11/17/21 replace each other
+      tag: data.tag || "olives", // 11/17/21 replace each other
       renotify: true,
       icon: "/icon-192.png",
       data: { url: data.url || "/" },

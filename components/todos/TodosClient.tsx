@@ -96,7 +96,7 @@ export function TodosClient() {
         </p>
       )}
 
-      <TodoForm userId={userId} todos={sorted} />
+      <TodoForm userId={userId} />
 
       {todos === undefined ? (
         <p className="text-sm text-[var(--muted)]">Loading…</p>
@@ -127,13 +127,19 @@ export function TodosClient() {
   );
 }
 
-/** Sort: open first, then date (nulls last), then creation order. */
+/** Sort: open first; then within a section, rows never manually placed
+ *  (sortOrder 0) by last modified (newest first), followed by manually placed
+ *  rows (sortOrder > 0) in their pinned order. A drag renumbers the whole
+ *  section, so a section is either recency-ordered or fully manual; rows
+ *  fresh into a section (new, or moved by a date/priority/blocker/done
+ *  change — those reset sortOrder) surface at the top either way. */
 function sortTodos(todos: TodoRecord[]): TodoRecord[] {
   return [...todos].sort((a, b) => {
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    const da = a.date ?? "9999-12-31";
-    const db = b.date ?? "9999-12-31";
-    if (da !== db) return da < db ? -1 : 1;
-    return a.createdAt - b.createdAt;
+    const pinnedA = a.sortOrder > 0;
+    const pinnedB = b.sortOrder > 0;
+    if (pinnedA !== pinnedB) return pinnedA ? 1 : -1;
+    if (pinnedA && a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
+    return b.updatedAt - a.updatedAt;
   });
 }

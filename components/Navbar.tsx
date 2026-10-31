@@ -11,8 +11,8 @@ import { resetLocalData } from "@/lib/local/reset";
 
 // Single-letter labels keep the bar compact on phones; the full name shows
 // on hover/long-press via title, and screen readers use aria-label. Calendar
-// is the app's home (/ redirects there); Daily is the accountability section.
-// Week/Month/Year live in the accountability sidebar (see
+// is the app's home (/ redirects there); Daily is the daily-tracker section.
+// Week/Month/Year live in the tracker sidebar (see
 // components/summary/SummarySidebar) — this bar switches sections only.
 const LINKS: { href: string; label: string; aria: string; sepBefore?: boolean }[] = [
   { href: "/daily", label: "D", aria: "Daily" },
@@ -45,7 +45,7 @@ export function Navbar() {
           className="mr-2 flex items-center gap-2 font-semibold tracking-tight"
         >
           <Logo className="h-6 w-6" />
-          <span className="hidden sm:inline">Accountability</span>
+          <span className="hidden sm:inline">Olives</span>
         </Link>
 
         <nav className="flex min-w-0 items-center gap-0.5 overflow-x-auto">

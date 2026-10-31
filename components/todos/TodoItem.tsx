@@ -7,13 +7,17 @@ import { toggleTodo } from "@/lib/local/mutations";
 import type { TodoRecord } from "@/lib/local/types";
 
 /**
- * One todo row, shared by the flat views and the dependency tree: a checkbox
- * plus the text with read-only markers (priority tag, date, lock). Tapping
- * the row opens the full editor (TodoEditDialog, via onEdit) — there are no
- * per-row option toggles, so every row stays one clean line. Both inline
- * actions (toggle done, open editor) are local and instant.
+ * The body of one todo row: a checkbox plus the text with read-only markers
+ * (priority tag, date, lock). Tapping the text opens the full editor
+ * (TodoEditDialog, via onEdit) — there are no per-row option toggles, so
+ * every row stays one clean line. Both inline actions (toggle done, open
+ * editor) are local and instant.
+ *
+ * The tree renders this inside its own plain <li> (TodoItem below); the list
+ * views wrap it in a sortable <li> with a drag grip (SortableTodoItem in
+ * TodoList).
  */
-export function TodoItem({
+export function TodoItemContent({
   todo,
   byId,
   today,
@@ -28,7 +32,7 @@ export function TodoItem({
   const overdue = !!todo.date && todo.date < today && !todo.completed;
 
   return (
-    <li className="flex items-start gap-2 py-1.5">
+    <div className="flex min-w-0 flex-1 items-start gap-2">
       <button
         onClick={() => void toggleTodo(todo.id)}
         aria-label={todo.completed ? "Mark not done" : "Mark done"}
@@ -85,6 +89,20 @@ export function TodoItem({
           )}
         </span>
       </button>
+    </div>
+  );
+}
+
+/** Plain (non-sortable) row, used by the dependency tree. */
+export function TodoItem(props: {
+  todo: TodoRecord;
+  byId: Map<string, TodoRecord>;
+  today: string;
+  onEdit: (id: string) => void;
+}) {
+  return (
+    <li className="flex items-start gap-2 py-1.5">
+      <TodoItemContent {...props} />
     </li>
   );
 }

@@ -34,6 +34,11 @@ export interface TodoRecord extends BaseRecord {
    *  on rows created before the field existed — comparisons are equality, so
    *  undefined behaves as null. */
   priority: "high" | "low" | null;
+  /** Manual position within a list section (1 = first). 0 = never placed —
+   *  the row then orders by last-modified. Dragging a grip renumbers the
+   *  whole section; edits that move the row to another section (date,
+   *  priority, blocker, done) reset it to 0. Section-scoped: numbers from
+   *  one section mean nothing in another. */
   sortOrder: number;
 }
 
